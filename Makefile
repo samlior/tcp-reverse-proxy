@@ -1,4 +1,6 @@
-.PHONY: build
+.PHONY: build clean
+
+all: build
 
 build:
 	go build -o bin/relay-server cmd/relay-server/main.go
