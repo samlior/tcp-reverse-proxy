@@ -15,6 +15,8 @@ import (
 type KeepDialingServer struct {
 	*CommonServer
 
+	OnDial func()
+
 	isUpstream bool
 
 	semaphore           chan struct{}
@@ -85,8 +87,8 @@ func (s *KeepDialingServer) dial() {
 		keepDialingConnType = constant.ConnTypeDown
 	}
 
-	s.CommonServer.HandleConnection(conn, keepDialingConnType, func(ch chan []byte) (isUpStream bool, err error) {
-		challenge := <-ch
+	s.CommonServer.HandleConnection(conn, keepDialingConnType, func(conn *Conn) (isUpStream bool, err error) {
+		challenge := <-conn.Ch
 		if len(challenge) != 32 {
 			return false, errors.New("invalid challenge")
 		}
@@ -102,7 +104,7 @@ func (s *KeepDialingServer) dial() {
 
 		// this is the entry point
 		// inform the relay server our type
-		_, err = conn.Write(append([]byte{flag}, signature...))
+		_, err = conn.Conn.Write(append([]byte{flag}, signature...))
 		if err != nil {
 			return false, err
 		}

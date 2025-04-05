@@ -30,14 +30,14 @@ func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 }
 
 func (s *RelayServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(ch chan []byte) (isUpStream bool, err error) {
+	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(conn *common.Conn) (isUpStream bool, err error) {
 		randomBytes := make([]byte, 32)
 		_, err = rand.Read(randomBytes)
 		if err != nil {
 			return
 		}
 
-		_, err = conn.Write(randomBytes)
+		_, err = conn.Conn.Write(randomBytes)
 		if err != nil {
 			return
 		}
@@ -47,7 +47,7 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 		case <-time.After(time.Second):
 			err = errors.New("client challenge timed out")
 			return
-		case initialMessage := <-ch:
+		case initialMessage := <-conn.Ch:
 			if len(initialMessage) != 1+64 {
 				err = errors.New("client sent invalid initial message")
 				return

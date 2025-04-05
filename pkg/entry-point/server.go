@@ -27,7 +27,21 @@ type EntryPointServer struct {
 	routes []Route
 }
 
-func ParseRoutes(_routes []string) ([]Route, error) {
+func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, _routes []string) *EntryPointServer {
+	ks := common.NewKeepDialingServer(false, serverAddress, authPrivateKeyBytes, certPool)
+
+	routes, err := parseRoutes(_routes)
+	if err != nil {
+		panic(err)
+	}
+
+	return &EntryPointServer{
+		KeepDialingServer: ks,
+		routes:            routes,
+	}
+}
+
+func parseRoutes(_routes []string) ([]Route, error) {
 	routes := make([]Route, len(_routes))
 
 	for _, route := range _routes {
@@ -115,23 +129,9 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 	return routes, nil
 }
 
-func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, _routes []string) *EntryPointServer {
-	ks := common.NewKeepDialingServer(true, serverAddress, authPrivateKeyBytes, certPool)
-
-	routes, err := ParseRoutes(_routes)
-	if err != nil {
-		panic(err)
-	}
-
-	return &EntryPointServer{
-		KeepDialingServer: ks,
-		routes:            routes,
-	}
-}
-
 func (s *EntryPointServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, constant.ConnTypeUp, func(ch chan []byte) (isUpStream bool, err error) {
-		localAddr := conn.LocalAddr().String()
+	s.CommonServer.HandleConnection(conn, constant.ConnTypeUp, func(conn *common.Conn) (isUpStream bool, err error) {
+		localAddr := conn.Conn.LocalAddr().String()
 		host, strPort, err := net.SplitHostPort(localAddr)
 		if err != nil {
 			return false, err
@@ -164,7 +164,7 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 		dstPostBytes := make([]byte, 16)
 		binary.BigEndian.PutUint16(dstPostBytes, route.dstPort)
 
-		_, err = conn.Write(append(dstHostBytes, dstPostBytes...))
+		_, err = conn.Conn.Write(append(dstHostBytes, dstPostBytes...))
 		if err != nil {
 			return false, err
 		}

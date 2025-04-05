@@ -10,10 +10,9 @@ import (
 )
 
 type Conn struct {
-	id   uint64
-	conn net.Conn
-	ch   chan []byte
-
+	Id   uint64
+	Conn net.Conn
+	Ch   chan []byte
 	Type string
 }
 
@@ -49,7 +48,7 @@ func (cs *CommonServer) readDataFromConn(conn *Conn) {
 	buffer := make([]byte, 1024)
 
 	for {
-		length, err := conn.conn.Read(buffer)
+		length, err := conn.Conn.Read(buffer)
 		if err == io.EOF {
 			// closed
 			return
@@ -60,7 +59,7 @@ func (cs *CommonServer) readDataFromConn(conn *Conn) {
 		}
 
 		// send data to channel
-		conn.ch <- buffer[:length]
+		conn.Ch <- buffer[:length]
 	}
 }
 
@@ -68,7 +67,7 @@ func (cs *CommonServer) writeDataToConn(conn *Conn, ch <-chan []byte) {
 	defer cs.removeConn(conn)
 
 	for data := range ch {
-		_, err := conn.conn.Write(data)
+		_, err := conn.Conn.Write(data)
 		if err == io.EOF {
 			// closed
 			return
@@ -126,12 +125,12 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 		}
 
 		// add connection to map
-		cs.Connections[conn.id][another.conn.id] = connection
-		cs.Connections[another.conn.id][conn.id] = connection
+		cs.Connections[conn.Id][another.conn.Id] = connection
+		cs.Connections[another.conn.Id][conn.Id] = connection
 
 		// return the channel
-		anotherChCh <- another.conn.ch
-		another.anotherChCh <- conn.ch
+		anotherChCh <- another.conn.Ch
+		another.anotherChCh <- conn.Ch
 	} else {
 		// add it to the pending queue
 		*pendingConnections = append(*pendingConnections, &PendingConnection{
@@ -157,15 +156,15 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
 
-	log.Println("connection removed:", conn.id, conn.conn.RemoteAddr())
+	log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
 
 	// remove connected connections
 	{
 		var anotherId uint64
 
-		for _anotherId, connection := range cs.Connections[conn.id] {
-			connection.up.conn.Close()
-			connection.down.conn.Close()
+		for _anotherId, connection := range cs.Connections[conn.Id] {
+			connection.up.Conn.Close()
+			connection.down.Conn.Close()
 
 			anotherId = _anotherId
 
@@ -173,7 +172,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 			cs.onConnClosed(connection.down)
 		}
 
-		delete(cs.Connections, conn.id)
+		delete(cs.Connections, conn.Id)
 		delete(cs.Connections, anotherId)
 	}
 
@@ -181,7 +180,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 	{
 		for i, p := range cs.PendingUpConnections {
 			if p.conn == conn {
-				p.conn.conn.Close()
+				p.conn.Conn.Close()
 				p.anotherChCh <- nil
 				cs.PendingUpConnections = append(cs.PendingUpConnections[:i], cs.PendingUpConnections[i+1:]...)
 				cs.onConnClosed(conn)
@@ -191,7 +190,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 		for i, p := range cs.PendingDownConnections {
 			if p.conn == conn {
-				p.conn.conn.Close()
+				p.conn.Conn.Close()
 				p.anotherChCh <- nil
 				cs.PendingDownConnections = append(cs.PendingDownConnections[:i], cs.PendingDownConnections[i+1:]...)
 				cs.onConnClosed(conn)
@@ -204,13 +203,13 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 func (cs *CommonServer) HandleConnection(
 	_conn net.Conn,
 	connType string,
-	onInit func(ch chan []byte) (isUpStream bool, err error),
+	onInit func(conn *Conn) (isUpStream bool, err error),
 ) {
 	id, closed := cs.genId()
 	conn := &Conn{
-		id:   id,
-		conn: _conn,
-		ch:   make(chan []byte),
+		Id:   id,
+		Conn: _conn,
+		Ch:   make(chan []byte),
 		Type: connType,
 	}
 	if closed {
@@ -218,11 +217,11 @@ func (cs *CommonServer) HandleConnection(
 		return
 	}
 
-	log.Println("client connected:", id, conn.conn.RemoteAddr())
+	log.Println("client connected:", id, conn.Conn.RemoteAddr())
 
 	go cs.readDataFromConn(conn)
 
-	isUpStream, err := onInit(conn.ch)
+	isUpStream, err := onInit(conn)
 	if err != nil {
 		log.Println("error onInit:", err)
 		cs.removeConn(conn)
@@ -268,8 +267,8 @@ func (cs *CommonServer) Close() {
 	{
 		for _, _map := range cs.Connections {
 			for _, connection := range _map {
-				connection.up.conn.Close()
-				connection.down.conn.Close()
+				connection.up.Conn.Close()
+				connection.down.Conn.Close()
 			}
 		}
 
@@ -280,13 +279,13 @@ func (cs *CommonServer) Close() {
 	{
 		for _, p := range cs.PendingUpConnections {
 			p.anotherChCh <- nil
-			p.conn.conn.Close()
+			p.conn.Conn.Close()
 		}
 		cs.PendingUpConnections = make([]*PendingConnection, 0)
 
 		for _, p := range cs.PendingDownConnections {
 			p.anotherChCh <- nil
-			p.conn.conn.Close()
+			p.conn.Conn.Close()
 		}
 		cs.PendingDownConnections = make([]*PendingConnection, 0)
 	}
