@@ -1,4 +1,4 @@
-package server
+package relay_server
 
 import (
 	"crypto/ed25519"

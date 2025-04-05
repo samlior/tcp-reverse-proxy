@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	server "github.com/samlior/tcp-reverse-proxy/pkg/common"
+	relay_server "github.com/samlior/tcp-reverse-proxy/pkg/relay-server"
 )
 
 func main() {
@@ -48,7 +48,7 @@ func main() {
 
 	log.Printf("listening on %s:%d...", *host, *port)
 
-	relayServer := server.NewRelayServer(authPublicKeyBytes)
+	relayServer := relay_server.NewRelayServer(authPublicKeyBytes)
 
 	for {
 		conn, err := listener.Accept()
