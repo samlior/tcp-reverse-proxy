@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net"
@@ -10,10 +11,11 @@ import (
 )
 
 type Conn struct {
-	Id   uint64
-	Conn net.Conn
-	Ch   chan []byte
-	Type string
+	Id      uint64
+	Conn    net.Conn
+	Ch      chan []byte
+	Type    string
+	MatchId []byte
 }
 
 type PendingConnection struct {
@@ -104,40 +106,54 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 	}
 
 	if len(*anotherPendingConnections) > 0 {
-		// choose first pending connection
-		another := (*anotherPendingConnections)[0]
-		*anotherPendingConnections = (*anotherPendingConnections)[1:]
-
-		// invoke callback
-		cs.onConnected(conn, another.conn)
-
-		var connection *Connection
-		if isUpStream {
-			connection = &Connection{
-				up:   conn,
-				down: another.conn,
-			}
-		} else {
-			connection = &Connection{
-				up:   another.conn,
-				down: conn,
+		// select the matching connection
+		var another *PendingConnection
+		var anotherIndex int
+		for i, p := range *anotherPendingConnections {
+			if conn.MatchId == nil || bytes.Equal(p.conn.MatchId, conn.MatchId) {
+				another = p
+				anotherIndex = i
+				break
 			}
 		}
 
-		// add connection to map
-		cs.Connections[conn.Id][another.conn.Id] = connection
-		cs.Connections[another.conn.Id][conn.Id] = connection
+		if another != nil {
+			// remove the connection from the pending queue
+			*anotherPendingConnections = append((*anotherPendingConnections)[:anotherIndex], (*anotherPendingConnections)[anotherIndex+1:]...)
 
-		// return the channel
-		anotherChCh <- another.conn.Ch
-		another.anotherChCh <- conn.Ch
-	} else {
-		// add it to the pending queue
-		*pendingConnections = append(*pendingConnections, &PendingConnection{
-			conn,
-			anotherChCh,
-		})
+			// invoke callback
+			cs.onConnected(conn, another.conn)
+
+			var connection *Connection
+			if isUpStream {
+				connection = &Connection{
+					up:   conn,
+					down: another.conn,
+				}
+			} else {
+				connection = &Connection{
+					up:   another.conn,
+					down: conn,
+				}
+			}
+
+			// add connection to map
+			cs.Connections[conn.Id][another.conn.Id] = connection
+			cs.Connections[another.conn.Id][conn.Id] = connection
+
+			// return the channel
+			anotherChCh <- another.conn.Ch
+			another.anotherChCh <- conn.Ch
+
+			return
+		}
 	}
+
+	// add it to the pending queue
+	*pendingConnections = append(*pendingConnections, &PendingConnection{
+		conn,
+		anotherChCh,
+	})
 }
 
 func (cs *CommonServer) onConnClosed(conn *Conn) {

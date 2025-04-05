@@ -15,7 +15,7 @@ import (
 type KeepDialingServer struct {
 	*CommonServer
 
-	OnDial func()
+	OnDial func(conn *Conn) error
 
 	isUpstream bool
 
@@ -71,6 +71,13 @@ func NewKeepDialingServer(
 	return s
 }
 
+func (s *KeepDialingServer) onDial(conn *Conn) error {
+	if s.OnDial != nil {
+		return s.OnDial(conn)
+	}
+	return nil
+}
+
 func (s *KeepDialingServer) dial() {
 	conn, err := tls.Dial("tcp", s.serverAddress, &tls.Config{
 		RootCAs: s.certPool,
@@ -105,6 +112,12 @@ func (s *KeepDialingServer) dial() {
 		// this is the entry point
 		// inform the relay server our type
 		_, err = conn.Conn.Write(append([]byte{flag}, signature...))
+		if err != nil {
+			return false, err
+		}
+
+		// invoke the callback
+		err = s.onDial(conn)
 		if err != nil {
 			return false, err
 		}
