@@ -6,11 +6,6 @@ const (
 	ConnTypeUnknown = "unknown"
 )
 
-const (
-	ConnStatusPending = iota
-	ConnStatusConnected
-)
-
 const Concurrency = 5
 
 var (

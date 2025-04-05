@@ -14,8 +14,7 @@ type Conn struct {
 	conn net.Conn
 	ch   chan []byte
 
-	Type   string
-	Status int
+	Type string
 }
 
 type PendingConnection struct {
@@ -126,10 +125,6 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 			}
 		}
 
-		// update status
-		conn.Status = constant.ConnStatusConnected
-		another.conn.Status = constant.ConnStatusConnected
-
 		// add connection to map
 		cs.Connections[conn.id][another.conn.id] = connection
 		cs.Connections[another.conn.id][conn.id] = connection
@@ -213,11 +208,10 @@ func (cs *CommonServer) HandleConnection(
 ) {
 	id, closed := cs.genId()
 	conn := &Conn{
-		id:     id,
-		conn:   _conn,
-		ch:     make(chan []byte),
-		Type:   constant.ConnTypeUnknown,
-		Status: constant.ConnStatusPending,
+		id:   id,
+		conn: _conn,
+		ch:   make(chan []byte),
+		Type: constant.ConnTypeUnknown,
 	}
 	if connType != nil {
 		// set the custom conn type if it exists
