@@ -63,5 +63,5 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 
 			return
 		}
-	})
+	}, nil)
 }

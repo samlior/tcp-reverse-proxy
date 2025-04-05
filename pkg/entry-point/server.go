@@ -15,6 +15,10 @@ import (
 
 const concurrency = 5
 
+var (
+	ConnTypePendingDown = "pending-down"
+)
+
 type EntryPointServer struct {
 	common.CommonServer
 
@@ -38,13 +42,13 @@ func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certP
 		},
 	}
 
-	s.OnPendingConnRemoved = func(id uint64, conn net.Conn, isUpStream bool) {
+	s.OnPendingConnRemoved = func(conn *common.Conn) {
 		// whenever a downstream connection drops,
 		// immediately establish a new one to maintain
 		// a consistent number of pending downstream connections
-		if !isUpStream && !s.CommonServer.IsClosed() {
+		if (conn.ConnType == common.ConnTypeDown || conn.ConnType == ConnTypePendingDown) && !s.CommonServer.IsClosed() {
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)+50))
-			s.semaphore <- struct{}{}
+			<-s.semaphore
 		}
 	}
 
@@ -79,7 +83,7 @@ func (s *EntryPointServer) dial() {
 
 		// inform the local server that we are the downstream
 		return false, nil
-	})
+	}, &ConnTypePendingDown)
 }
 
 func (s *EntryPointServer) keepDialing() {
@@ -93,5 +97,5 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 	s.CommonServer.HandleConnection(conn, func(ch chan []byte) (isUpStream bool, err error) {
 		// inform the local server that we are the upstream
 		return true, nil
-	})
+	}, nil)
 }
