@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/samlior/tcp-reverse-proxy/pkg/common"
+	"github.com/samlior/tcp-reverse-proxy/pkg/constant"
 )
 
 type RelayServer struct {
-	common.CommonServer
+	*common.CommonServer
 
 	authPublicKeyBytes []byte
 }
@@ -19,7 +20,7 @@ type RelayServer struct {
 func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 	return &RelayServer{
 		authPublicKeyBytes: authPublicKeyBytes,
-		CommonServer: common.CommonServer{
+		CommonServer: &common.CommonServer{
 			Id:                     1,
 			PendingUpConnections:   make([]*common.PendingConnection, 0),
 			PendingDownConnections: make([]*common.PendingConnection, 0),
@@ -29,7 +30,7 @@ func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 }
 
 func (s *RelayServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, func(ch chan []byte) (isUpStream bool, err error) {
+	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(ch chan []byte) (isUpStream bool, err error) {
 		randomBytes := make([]byte, 32)
 		_, err = rand.Read(randomBytes)
 		if err != nil {
@@ -63,5 +64,5 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 
 			return
 		}
-	}, nil)
+	})
 }

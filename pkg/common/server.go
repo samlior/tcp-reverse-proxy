@@ -43,7 +43,7 @@ type CommonServer struct {
 	lock sync.Mutex
 }
 
-func (cs *CommonServer) readDataFromConn(conn *Conn, ch chan<- []byte) {
+func (cs *CommonServer) readDataFromConn(conn *Conn) {
 	defer cs.removeConn(conn)
 
 	buffer := make([]byte, 1024)
@@ -60,7 +60,7 @@ func (cs *CommonServer) readDataFromConn(conn *Conn, ch chan<- []byte) {
 		}
 
 		// send data to channel
-		ch <- buffer[:length]
+		conn.ch <- buffer[:length]
 	}
 }
 
@@ -203,19 +203,15 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 func (cs *CommonServer) HandleConnection(
 	_conn net.Conn,
+	connType string,
 	onInit func(ch chan []byte) (isUpStream bool, err error),
-	connType *string,
 ) {
 	id, closed := cs.genId()
 	conn := &Conn{
 		id:   id,
 		conn: _conn,
 		ch:   make(chan []byte),
-		Type: constant.ConnTypeUnknown,
-	}
-	if connType != nil {
-		// set the custom conn type if it exists
-		conn.Type = *connType
+		Type: connType,
 	}
 	if closed {
 		cs.removeConn(conn)
@@ -224,11 +220,9 @@ func (cs *CommonServer) HandleConnection(
 
 	log.Println("client connected:", id, conn.conn.RemoteAddr())
 
-	readCh := make(chan []byte)
+	go cs.readDataFromConn(conn)
 
-	go cs.readDataFromConn(conn, readCh)
-
-	isUpStream, err := onInit(readCh)
+	isUpStream, err := onInit(conn.ch)
 	if err != nil {
 		log.Println("error onInit:", err)
 		cs.removeConn(conn)

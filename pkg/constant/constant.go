@@ -7,7 +7,3 @@ const (
 )
 
 const Concurrency = 5
-
-var (
-	ConnTypePendingDown = "pending-down"
-)
