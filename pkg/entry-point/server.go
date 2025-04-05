@@ -11,12 +11,7 @@ import (
 	"time"
 
 	common "github.com/samlior/tcp-reverse-proxy/pkg/common"
-)
-
-const concurrency = 5
-
-var (
-	ConnTypePendingDown = "pending-down"
+	constant "github.com/samlior/tcp-reverse-proxy/pkg/constant"
 )
 
 type EntryPointServer struct {
@@ -30,7 +25,7 @@ type EntryPointServer struct {
 
 func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool) *EntryPointServer {
 	s := &EntryPointServer{
-		semaphore:           make(chan struct{}, concurrency),
+		semaphore:           make(chan struct{}, constant.Concurrency),
 		serverAddress:       serverAddress,
 		authPrivateKeyBytes: authPrivateKeyBytes,
 		certPool:            certPool,
@@ -42,14 +37,19 @@ func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certP
 		},
 	}
 
-	s.OnPendingConnRemoved = func(conn *common.Conn) {
+	s.OnConnClosed = func(conn *common.Conn) {
 		// whenever a downstream connection drops,
 		// immediately establish a new one to maintain
 		// a consistent number of pending downstream connections
-		if (conn.ConnType == common.ConnTypeDown || conn.ConnType == ConnTypePendingDown) && !s.CommonServer.IsClosed() {
+		if (conn.Type == constant.ConnTypeDown || conn.Type == constant.ConnTypePendingDown) && !s.CommonServer.IsClosed() {
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)+50))
 			<-s.semaphore
 		}
+	}
+
+	s.OnConnected = func(conn *common.Conn, anotherConn *common.Conn) {
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)+50))
+		<-s.semaphore
 	}
 
 	go s.keepDialing()
@@ -83,7 +83,7 @@ func (s *EntryPointServer) dial() {
 
 		// inform the local server that we are the downstream
 		return false, nil
-	}, &ConnTypePendingDown)
+	}, &constant.ConnTypePendingDown)
 }
 
 func (s *EntryPointServer) keepDialing() {

@@ -5,19 +5,17 @@ import (
 	"log"
 	"net"
 	"sync"
-)
 
-const (
-	ConnTypeUp      = "up"
-	ConnTypeDown    = "down"
-	ConnTypeUnknown = "unknown"
+	constant "github.com/samlior/tcp-reverse-proxy/pkg/constant"
 )
 
 type Conn struct {
-	id       uint64
-	conn     net.Conn
-	ch       chan []byte
-	ConnType string
+	id   uint64
+	conn net.Conn
+	ch   chan []byte
+
+	Type   string
+	Status int
 }
 
 type PendingConnection struct {
@@ -33,7 +31,8 @@ type Connection struct {
 type CommonServer struct {
 	Id uint64
 
-	OnPendingConnRemoved func(*Conn)
+	OnConnClosed func(*Conn)
+	OnConnected  func(*Conn, *Conn)
 
 	PendingUpConnections   []*PendingConnection
 	PendingDownConnections []*PendingConnection
@@ -110,7 +109,9 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 		// choose first pending connection
 		another := (*anotherPendingConnections)[0]
 		*anotherPendingConnections = (*anotherPendingConnections)[1:]
-		cs.onPendingConnRemoved(conn)
+
+		// invoke callback
+		cs.onConnected(conn, another.conn)
 
 		var connection *Connection
 		if isUpStream {
@@ -125,9 +126,15 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 			}
 		}
 
+		// update status
+		conn.Status = constant.ConnStatusConnected
+		another.conn.Status = constant.ConnStatusConnected
+
+		// add connection to map
 		cs.Connections[conn.id][another.conn.id] = connection
 		cs.Connections[another.conn.id][conn.id] = connection
 
+		// return the channel
 		anotherChCh <- another.conn.ch
 		another.anotherChCh <- conn.ch
 	} else {
@@ -139,9 +146,15 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, isUpStream bool, another
 	}
 }
 
-func (cs *CommonServer) onPendingConnRemoved(conn *Conn) {
-	if cs.OnPendingConnRemoved != nil {
-		cs.OnPendingConnRemoved(conn)
+func (cs *CommonServer) onConnClosed(conn *Conn) {
+	if cs.OnConnClosed != nil {
+		cs.OnConnClosed(conn)
+	}
+}
+
+func (cs *CommonServer) onConnected(conn *Conn, anotherConn *Conn) {
+	if cs.OnConnected != nil {
+		cs.OnConnected(conn, anotherConn)
 	}
 }
 
@@ -160,6 +173,9 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 			connection.down.conn.Close()
 
 			anotherId = _anotherId
+
+			cs.onConnClosed(connection.up)
+			cs.onConnClosed(connection.down)
 		}
 
 		delete(cs.Connections, conn.id)
@@ -173,7 +189,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 				p.conn.conn.Close()
 				p.anotherChCh <- nil
 				cs.PendingUpConnections = append(cs.PendingUpConnections[:i], cs.PendingUpConnections[i+1:]...)
-				cs.onPendingConnRemoved(conn)
+				cs.onConnClosed(conn)
 				return
 			}
 		}
@@ -183,7 +199,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 				p.conn.conn.Close()
 				p.anotherChCh <- nil
 				cs.PendingDownConnections = append(cs.PendingDownConnections[:i], cs.PendingDownConnections[i+1:]...)
-				cs.onPendingConnRemoved(conn)
+				cs.onConnClosed(conn)
 				return
 			}
 		}
@@ -197,14 +213,15 @@ func (cs *CommonServer) HandleConnection(
 ) {
 	id, closed := cs.genId()
 	conn := &Conn{
-		id:       id,
-		conn:     _conn,
-		ch:       make(chan []byte),
-		ConnType: ConnTypeUnknown,
+		id:     id,
+		conn:   _conn,
+		ch:     make(chan []byte),
+		Type:   constant.ConnTypeUnknown,
+		Status: constant.ConnStatusPending,
 	}
 	if connType != nil {
 		// set the custom conn type if it exists
-		conn.ConnType = *connType
+		conn.Type = *connType
 	}
 	if closed {
 		cs.removeConn(conn)
@@ -226,9 +243,9 @@ func (cs *CommonServer) HandleConnection(
 
 	// set conn type
 	if isUpStream {
-		conn.ConnType = ConnTypeUp
+		conn.Type = constant.ConnTypeUp
 	} else {
-		conn.ConnType = ConnTypeDown
+		conn.Type = constant.ConnTypeDown
 	}
 
 	anotherChCh := make(chan chan []byte, 1)
