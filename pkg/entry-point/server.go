@@ -14,11 +14,11 @@ import (
 )
 
 type Route struct {
-	srcHost string
-	srcPort uint16
+	SrcHost string
+	SrcPort uint16
 
-	dstHost string
-	dstPort uint16
+	DstHost string
+	DstPort uint16
 }
 
 type EntryPointServer struct {
@@ -27,13 +27,8 @@ type EntryPointServer struct {
 	routes []Route
 }
 
-func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, _routes []string) *EntryPointServer {
+func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, routes []Route) *EntryPointServer {
 	ks := common.NewKeepDialingServer(false, serverAddress, authPrivateKeyBytes, certPool)
-
-	routes, err := parseRoutes(_routes)
-	if err != nil {
-		panic(err)
-	}
 
 	return &EntryPointServer{
 		KeepDialingServer: ks,
@@ -41,7 +36,7 @@ func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certP
 	}
 }
 
-func parseRoutes(_routes []string) ([]Route, error) {
+func ParseRoutes(_routes []string) ([]Route, error) {
 	routes := make([]Route, len(_routes))
 
 	for _, route := range _routes {
@@ -62,10 +57,10 @@ func parseRoutes(_routes []string) ([]Route, error) {
 			}
 
 			routes = append(routes, Route{
-				srcHost: "*",
-				srcPort: uint16(srcPort),
-				dstHost: "127.0.0.1",
-				dstPort: uint16(dstPort),
+				SrcHost: "*",
+				SrcPort: uint16(srcPort),
+				DstHost: "127.0.0.1",
+				DstPort: uint16(dstPort),
 			})
 		} else if len(parts) == 3 {
 			var srcHost string
@@ -98,10 +93,10 @@ func parseRoutes(_routes []string) ([]Route, error) {
 			}
 
 			routes = append(routes, Route{
-				srcHost: srcHost,
-				srcPort: uint16(srcPort),
-				dstHost: dstHost,
-				dstPort: uint16(dstPort),
+				SrcHost: srcHost,
+				SrcPort: uint16(srcPort),
+				DstHost: dstHost,
+				DstPort: uint16(dstPort),
 			})
 		} else if len(parts) == 4 {
 			// ip:port:ip:port
@@ -116,10 +111,10 @@ func parseRoutes(_routes []string) ([]Route, error) {
 			}
 
 			routes = append(routes, Route{
-				srcHost: parts[0],
-				srcPort: uint16(srcPort),
-				dstHost: parts[2],
-				dstPort: uint16(dstPort),
+				SrcHost: parts[0],
+				SrcPort: uint16(srcPort),
+				DstHost: parts[2],
+				DstPort: uint16(dstPort),
 			})
 		} else {
 			return nil, fmt.Errorf("invalid route: %s", route)
@@ -146,7 +141,7 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 
 		var route *Route
 		for _, r := range s.routes {
-			if (r.srcHost == "*" || r.srcHost == host) && r.srcPort == port {
+			if (r.SrcHost == "*" || r.SrcHost == host) && r.SrcPort == port {
 				route = &r
 				break
 			}
@@ -155,14 +150,14 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 			return false, fmt.Errorf("no route found for %s:%d", host, port)
 		}
 
-		dstHostBytes := net.ParseIP(route.dstHost)
+		dstHostBytes := net.ParseIP(route.DstHost)
 		if len(dstHostBytes) < 16 {
 			// fill with 0
 			dstHostBytes = append(make([]byte, 16-len(dstHostBytes)), dstHostBytes...)
 		}
 
 		dstPostBytes := make([]byte, 16)
-		binary.BigEndian.PutUint16(dstPostBytes, route.dstPort)
+		binary.BigEndian.PutUint16(dstPostBytes, route.DstPort)
 
 		_, err = conn.Conn.Write(append(dstHostBytes, dstPostBytes...))
 		if err != nil {

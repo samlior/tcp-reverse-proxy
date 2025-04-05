@@ -1,20 +1,22 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"crypto/tls"
 	"crypto/x509"
-	"encoding/binary"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"os"
-	"time"
+	"strings"
+
+	entry_point "github.com/samlior/tcp-reverse-proxy/pkg/entry-point"
 )
 
 func main() {
 	serverCert := flag.String("server-cert", "cert/server.crt", "server certificate path")
 	authPrivateKey := flag.String("auth-private-key", "cert/auth", "auth private key path")
 	serverAddress := flag.String("server-address", "localhost:4433", "server address")
+	strRoutes := flag.String("routes", "", "route addresses, separated by commas")
 
 	flag.Parse()
 
@@ -33,41 +35,36 @@ func main() {
 		log.Fatal("failed to append the server certificate")
 	}
 
-	conn, err := tls.Dial("tcp", *serverAddress, &tls.Config{
-		RootCAs: certPool,
-	})
+	routes, err := entry_point.ParseRoutes(strings.Split(*strRoutes, ","))
 	if err != nil {
-		log.Fatal("failed to connect to relay server:", err)
+		log.Fatal("failed to parse routes:", err)
 	}
 
-	defer conn.Close()
+	entryPointServer := entry_point.NewEntryPointServer(*serverAddress, authPrivateKeyBytes, certPool, routes)
 
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		log.Fatal("failed to read from relay server:", err)
-	}
+	go entryPointServer.KeepDialing()
 
-	signature := ed25519.Sign(authPrivateKeyBytes, buffer[:n])
+	for _, route := range routes {
+		srcHost := route.SrcHost
+		if srcHost == "*" {
+			srcHost = "0.0.0.0"
+		}
 
-	write := func(data []byte) (int, error) {
-		prefix := make([]byte, 2)
-		binary.BigEndian.PutUint16(prefix, uint16(len(data)))
-		return conn.Write(append(prefix, data...))
-	}
+		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", srcHost, route.SrcPort))
+		if err != nil {
+			log.Fatal("failed to listen:", err)
+		}
 
-	n, err = write(signature)
-	if err != nil {
-		log.Fatal("failed to write to relay server:", err)
-	}
+		log.Printf("listening on %s:%d...", srcHost, route.SrcPort)
 
-	log.Println("wrote size:", n)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Println("failed to accept connection:", err)
+				continue
+			}
 
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
-
-	for {
-		<-tick.C
-		write([]byte("hello"))
+			go entryPointServer.HandleConnection(conn)
+		}
 	}
 }

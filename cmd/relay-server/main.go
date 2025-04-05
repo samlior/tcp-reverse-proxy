@@ -56,6 +56,7 @@ func main() {
 			log.Println("failed to accept connection:", err)
 			continue
 		}
+
 		go relayServer.HandleConnection(conn)
 	}
 }

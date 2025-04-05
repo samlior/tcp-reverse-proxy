@@ -66,8 +66,6 @@ func NewKeepDialingServer(
 		<-s.semaphore
 	}
 
-	go s.keepDialing()
-
 	return s
 }
 
@@ -127,7 +125,7 @@ func (s *KeepDialingServer) dial() {
 	})
 }
 
-func (s *KeepDialingServer) keepDialing() {
+func (s *KeepDialingServer) KeepDialing() {
 	for !s.CommonServer.IsClosed() {
 		s.semaphore <- struct{}{}
 		go s.dial()
