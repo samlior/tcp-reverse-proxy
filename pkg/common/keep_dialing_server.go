@@ -55,18 +55,21 @@ func NewKeepDialingServer(
 		// whenever a connection drops,
 		// immediately establish a new one to maintain
 		// a consistent number of pending connections
-		if conn.Type == keepDialingConnType && !s.CommonServer.IsClosed() {
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)+50))
-			<-s.semaphore
+		if conn.Type == keepDialingConnType {
+			s.releaseSemaphore(1)
 		}
 	}
 
 	s.OnConnected = func(conn *Conn, anotherConn *Conn) {
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)+50))
-		<-s.semaphore
+		s.releaseSemaphore(1)
 	}
 
 	return s
+}
+
+func (s *KeepDialingServer) releaseSemaphore(multiple int) {
+	time.Sleep(time.Millisecond * time.Duration((rand.Intn(50)+50)*multiple))
+	<-s.semaphore
 }
 
 func (s *KeepDialingServer) onDial(conn *Conn) error {
@@ -82,6 +85,7 @@ func (s *KeepDialingServer) dial() {
 	})
 	if err != nil {
 		log.Println("failed to dial to relay server:", err)
+		s.releaseSemaphore(100)
 		return
 	}
 
@@ -121,7 +125,7 @@ func (s *KeepDialingServer) dial() {
 		}
 
 		// inform the local server our type
-		return !s.isUpstream, nil
+		return s.isUpstream, nil
 	})
 }
 

@@ -39,7 +39,7 @@ func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certP
 func ParseRoutes(_routes []string) ([]Route, error) {
 	routes := make([]Route, len(_routes))
 
-	for _, route := range _routes {
+	for i, route := range _routes {
 		parts := strings.Split(route, ":")
 
 		if len(parts) <= 1 {
@@ -56,12 +56,12 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 				return nil, fmt.Errorf("invalid destination port: %s", parts[1])
 			}
 
-			routes = append(routes, Route{
+			routes[i] = Route{
 				SrcHost: "*",
 				SrcPort: uint16(srcPort),
 				DstHost: "127.0.0.1",
 				DstPort: uint16(dstPort),
-			})
+			}
 		} else if len(parts) == 3 {
 			var srcHost string
 			var srcPort uint64
@@ -92,12 +92,12 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 				}
 			}
 
-			routes = append(routes, Route{
+			routes[i] = Route{
 				SrcHost: srcHost,
 				SrcPort: uint16(srcPort),
 				DstHost: dstHost,
 				DstPort: uint16(dstPort),
-			})
+			}
 		} else if len(parts) == 4 {
 			// ip:port:ip:port
 			srcPort, err := strconv.ParseUint(parts[1], 10, 16)
@@ -110,12 +110,12 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 				return nil, fmt.Errorf("invalid destination port: %s", parts[3])
 			}
 
-			routes = append(routes, Route{
+			routes[i] = Route{
 				SrcHost: parts[0],
 				SrcPort: uint16(srcPort),
 				DstHost: parts[2],
 				DstPort: uint16(dstPort),
-			})
+			}
 		} else {
 			return nil, fmt.Errorf("invalid route: %s", route)
 		}

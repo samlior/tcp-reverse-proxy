@@ -172,8 +172,6 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
 
-	log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
-
 	// remove connected connections
 	{
 		var anotherId uint64
@@ -186,6 +184,8 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 			cs.onConnClosed(connection.up)
 			cs.onConnClosed(connection.down)
+
+			log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
 		}
 
 		delete(cs.Connections, conn.Id)
@@ -200,6 +200,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 				p.anotherChCh <- nil
 				cs.PendingUpConnections = append(cs.PendingUpConnections[:i], cs.PendingUpConnections[i+1:]...)
 				cs.onConnClosed(conn)
+				log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
 				return
 			}
 		}
@@ -210,6 +211,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 				p.anotherChCh <- nil
 				cs.PendingDownConnections = append(cs.PendingDownConnections[:i], cs.PendingDownConnections[i+1:]...)
 				cs.onConnClosed(conn)
+				log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
 				return
 			}
 		}

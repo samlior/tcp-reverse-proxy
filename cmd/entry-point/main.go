@@ -45,6 +45,8 @@ func main() {
 	go entryPointServer.KeepDialing()
 
 	for _, route := range routes {
+		log.Println("route:", route)
+
 		srcHost := route.SrcHost
 		if srcHost == "*" {
 			srcHost = "0.0.0.0"
