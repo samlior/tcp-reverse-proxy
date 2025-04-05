@@ -83,6 +83,9 @@ func (rs *RelayServer) writeDataToConn(id uint64, conn net.Conn, ch <-chan []byt
 }
 
 func (rs *RelayServer) genId() uint64 {
+	rs.lock.Lock()
+	defer rs.lock.Unlock()
+
 	id := rs.id
 	rs.id++
 	return id
@@ -131,6 +134,7 @@ func (rs *RelayServer) registerPendingConn(id uint64, conn net.Conn, ch chan []b
 		anotherChCh <- another.ch
 		another.anotherChCh <- ch
 	} else {
+		// add it to the pending queue
 		*pendingConnections = append(*pendingConnections, &PendingConnection{
 			id,
 			conn,
@@ -179,13 +183,11 @@ func (rs *RelayServer) removeConn(id uint64, conn net.Conn) {
 
 		conn.Close()
 	}
+
+	log.Println("connection removed:", id, conn.RemoteAddr())
 }
 
 func (rs *RelayServer) HandleConnection(conn net.Conn) {
-	log.Println("client connected:", conn.RemoteAddr())
-
-	id := rs.genId()
-
 	randomBytes := make([]byte, 32)
 
 	_, err := rand.Read(randomBytes)
@@ -200,7 +202,10 @@ func (rs *RelayServer) HandleConnection(conn net.Conn) {
 		return
 	}
 
+	id := rs.genId()
 	ch := make(chan []byte)
+
+	log.Println("client connected:", id, conn.RemoteAddr())
 
 	go rs.readDataFromConn(id, conn, ch)
 
