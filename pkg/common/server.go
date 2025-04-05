@@ -215,13 +215,13 @@ func (rs *RelayServer) HandleConnection(conn net.Conn) {
 		log.Println("client challenge timed out")
 		return
 	case initialMessage := <-ch:
-		if len(initialMessage) != 1+16+2+64 {
+		if len(initialMessage) != 1+64 {
 			log.Println("client sent invalid initial message")
 			return
 		}
 
 		isUpStream := initialMessage[0] == 1
-		signature := initialMessage[1+16+2 : 1+16+2+64]
+		signature := initialMessage[1 : 1+64]
 
 		// verify challenge signature
 		if !ed25519.Verify(rs.authPublicKeyBytes, randomBytes, signature) {
