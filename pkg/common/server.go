@@ -3,31 +3,18 @@ package server
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"net"
+	"sync"
 	"time"
 )
 
-type Message struct {
-	Flag uint8
-	Data []byte
-}
-
-func parseMessage(bytes []byte) (*Message, error) {
-	if len(bytes) < 2 {
-		return nil, fmt.Errorf("invalid message")
-	}
-
-	return &Message{Flag: bytes[0], Data: bytes[1:]}, nil
-}
-
 type PendingConnection struct {
-	conn   net.Conn
-	ch     chan []byte
-	doneCh chan chan []byte
+	id          uint64
+	conn        net.Conn
+	ch          chan []byte
+	anotherChCh chan chan []byte
 }
 
 type Connection struct {
@@ -41,40 +28,30 @@ type Connection struct {
 type RelayServer struct {
 	id uint64
 
+	lock sync.Mutex
+
 	authPublicKeyBytes []byte
 
 	pendingUpConnections   []*PendingConnection
 	pendingDownConnections []*PendingConnection
 
-	connections map[uint64]*Connection
+	connections map[uint64]map[uint64]*Connection
 }
 
 func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 	return &RelayServer{
 		authPublicKeyBytes: authPublicKeyBytes,
-		connections:        make(map[uint64]*Connection),
+		connections:        make(map[uint64]map[uint64]*Connection),
 	}
 }
 
-func (rs *RelayServer) readDataFromConn(conn net.Conn, ch chan<- []byte) {
-	defer conn.Close()
+func (rs *RelayServer) readDataFromConn(id uint64, conn net.Conn, ch chan<- []byte) {
+	defer rs.removeConn(id, conn)
 
 	buffer := make([]byte, 1024)
-	cursor := 0
-	length := 0
-	left := 0
-	pending := []byte{}
-	var err error
-
-	read := func(n int) []byte {
-		slice := buffer[cursor : cursor+n]
-		cursor += n
-		length -= n
-		return slice
-	}
 
 	for {
-		length, err = conn.Read(buffer)
+		length, err := conn.Read(buffer)
 		if err == io.EOF {
 			// closed
 			return
@@ -84,36 +61,24 @@ func (rs *RelayServer) readDataFromConn(conn net.Conn, ch chan<- []byte) {
 			return
 		}
 
-		for length > 0 {
-			if left == 0 {
-				if length < 2 {
-					log.Println("client sent invalid message")
-					return
-				}
+		// send data to channel
+		ch <- buffer[:length]
+	}
+}
 
-				left = int(binary.BigEndian.Uint16(read(2)))
-			}
+func (rs *RelayServer) writeDataToConn(id uint64, conn net.Conn, ch <-chan []byte) {
+	defer rs.removeConn(id, conn)
 
-			var readLength int
-			if left > length {
-				readLength = length
-			} else {
-				readLength = left
-			}
-
-			pending = append(pending, read(readLength)...)
-
-			left -= readLength
-
-			if left == 0 {
-				ch <- pending
-
-				pending = []byte{}
-			}
+	for data := range ch {
+		_, err := conn.Write(data)
+		if err == io.EOF {
+			// closed
+			return
 		}
-
-		cursor = 0
-		length = 0
+		if err != nil {
+			log.Println("error writing to client:", err)
+			return
+		}
 	}
 }
 
@@ -123,7 +88,10 @@ func (rs *RelayServer) genId() uint64 {
 	return id
 }
 
-func (rs *RelayServer) registerPendingConn(conn net.Conn, ch chan []byte, isUpStream bool, doneCh chan chan []byte) {
+func (rs *RelayServer) registerPendingConn(id uint64, conn net.Conn, ch chan []byte, isUpStream bool, anotherChCh chan chan []byte) {
+	rs.lock.Lock()
+	defer rs.lock.Unlock()
+
 	var pendingConnections *[]*PendingConnection
 	var anotherPendingConnections *[]*PendingConnection
 
@@ -136,20 +104,20 @@ func (rs *RelayServer) registerPendingConn(conn net.Conn, ch chan []byte, isUpSt
 	}
 
 	if len(*anotherPendingConnections) > 0 {
+		// choose first pending connection
 		another := (*anotherPendingConnections)[0]
 		*anotherPendingConnections = (*anotherPendingConnections)[1:]
 
-		id := rs.genId()
-
+		var connection *Connection
 		if isUpStream {
-			rs.connections[id] = &Connection{
+			connection = &Connection{
 				upConn:   conn,
 				upCh:     ch,
 				downConn: another.conn,
 				downCh:   another.ch,
 			}
 		} else {
-			rs.connections[id] = &Connection{
+			connection = &Connection{
 				upConn:   another.conn,
 				upCh:     another.ch,
 				downConn: conn,
@@ -157,19 +125,66 @@ func (rs *RelayServer) registerPendingConn(conn net.Conn, ch chan []byte, isUpSt
 			}
 		}
 
-		doneCh <- another.ch
-		another.doneCh <- ch
+		rs.connections[id][another.id] = connection
+		rs.connections[another.id][id] = connection
+
+		anotherChCh <- another.ch
+		another.anotherChCh <- ch
 	} else {
 		*pendingConnections = append(*pendingConnections, &PendingConnection{
+			id,
 			conn,
 			ch,
-			doneCh,
+			anotherChCh,
 		})
+	}
+}
+
+func (rs *RelayServer) removeConn(id uint64, conn net.Conn) {
+	rs.lock.Lock()
+	defer rs.lock.Unlock()
+
+	// remove connected connections
+	{
+		var anotherId uint64
+
+		for _anotherId, connection := range rs.connections[id] {
+			connection.upConn.Close()
+			connection.downConn.Close()
+
+			anotherId = _anotherId
+		}
+
+		delete(rs.connections, id)
+		delete(rs.connections, anotherId)
+	}
+
+	// remove pending connections
+	{
+		for i, p := range rs.pendingUpConnections {
+			if p.conn == conn {
+				p.anotherChCh <- nil
+				rs.pendingUpConnections = append(rs.pendingUpConnections[:i], rs.pendingUpConnections[i+1:]...)
+				break
+			}
+		}
+
+		for i, p := range rs.pendingDownConnections {
+			if p.conn == conn {
+				p.anotherChCh <- nil
+				rs.pendingDownConnections = append(rs.pendingDownConnections[:i], rs.pendingDownConnections[i+1:]...)
+				break
+			}
+		}
+
+		conn.Close()
 	}
 }
 
 func (rs *RelayServer) HandleConnection(conn net.Conn) {
 	log.Println("client connected:", conn.RemoteAddr())
+
+	id := rs.genId()
 
 	randomBytes := make([]byte, 32)
 
@@ -185,32 +200,39 @@ func (rs *RelayServer) HandleConnection(conn net.Conn) {
 		return
 	}
 
-	readCh := make(chan []byte)
+	ch := make(chan []byte)
 
-	go rs.readDataFromConn(conn, readCh)
+	go rs.readDataFromConn(id, conn, ch)
 
 	// wait for challenge answer
 	select {
 	case <-time.After(time.Second):
 		log.Println("client challenge timed out")
 		return
-	case answer := <-readCh:
-		// verify challenge answer
-		if !ed25519.Verify(rs.authPublicKeyBytes, randomBytes, answer) {
+	case initialMessage := <-ch:
+		if len(initialMessage) != 1+16+2+64 {
+			log.Println("client sent invalid initial message")
+			return
+		}
+
+		isUpStream := initialMessage[0] == 1
+		signature := initialMessage[1+16+2 : 1+16+2+64]
+
+		// verify challenge signature
+		if !ed25519.Verify(rs.authPublicKeyBytes, randomBytes, signature) {
 			log.Println("client challenge verification failed")
 			return
 		}
 
-	}
+		anotherChCh := make(chan chan []byte, 1)
 
-	doneCh := make(chan chan []byte)
+		rs.registerPendingConn(id, conn, ch, isUpStream, anotherChCh)
 
-	// TODO: is up stream or down stream?
-	rs.registerPendingConn(conn, readCh, true, doneCh)
+		anotherCh := <-anotherChCh
+		if anotherCh == nil {
+			return
+		}
 
-	writeCh := <-doneCh
-
-	for data := range readCh {
-		writeCh <- data
+		go rs.writeDataToConn(id, conn, anotherCh)
 	}
 }
