@@ -151,18 +151,21 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 		}
 
 		dstHostBytes := net.ParseIP(route.DstHost)
-		if len(dstHostBytes) < 16 {
+		if dstHostBytes.To4() != nil {
+			// ipv4
+			dstHostBytes = dstHostBytes.To4()
 			// fill with 0
-			dstHostBytes = append(make([]byte, 16-len(dstHostBytes)), dstHostBytes...)
+			dstHostBytes = append(make([]byte, 16-len(dstHostBytes)), []byte(dstHostBytes)...)
+		} else {
+			// ipv6
+			dstHostBytes = dstHostBytes.To16()
 		}
 
-		dstPostBytes := make([]byte, 16)
+		dstPostBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(dstPostBytes, route.DstPort)
 
-		_, err = conn.Conn.Write(append(dstHostBytes, dstPostBytes...))
-		if err != nil {
-			return err
-		}
+		// set route information
+		conn.Route = append([]byte(dstHostBytes), dstPostBytes...)
 
 		return nil
 	})

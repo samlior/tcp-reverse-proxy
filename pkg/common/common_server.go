@@ -14,8 +14,9 @@ type Conn struct {
 	Id      uint64
 	Conn    net.Conn
 	Ch      chan []byte
-	Type    string
 	MatchId []byte
+	Route   []byte
+	Type    string
 	Status  int
 }
 
@@ -139,6 +140,8 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, anotherCh chan *Conn) {
 			anotherCh <- another.conn
 			another.anotherCh <- conn
 
+			log.Println("connection connected:", conn.Id, conn.Conn.RemoteAddr(), "<->", another.conn.Id, another.conn.Conn.RemoteAddr())
+
 			return
 		}
 	}
@@ -188,11 +191,11 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 	log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
 
-	// update status
-	conn.Status = constant.ConnStatusClosed
-
 	// invoke callback
 	cs.onConnClosed(conn)
+
+	// update status
+	conn.Status = constant.ConnStatusClosed
 }
 
 func (cs *CommonServer) HandleConnection(
@@ -237,15 +240,24 @@ func (cs *CommonServer) HandleConnection(
 			return
 		}
 
+		if another.Route != nil {
+			_, err := conn.Conn.Write(another.Route)
+			if err != nil {
+				log.Println("error writing route:", err)
+				return
+			}
+
+			// clear the route
+			another.Route = nil
+		}
+
 		go cs.writeDataToConn(conn, another.Ch, writeFinished)
 	}
 
-	<-readFinished
-
-	// manually remove the connection again
-	cs.removeConn(conn)
-
-	<-writeFinished
+	select {
+	case <-readFinished:
+	case <-writeFinished:
+	}
 }
 
 func (cs *CommonServer) IsClosed() bool {

@@ -32,5 +32,5 @@ func main() {
 
 	reverseProxyServer := reverse_proxy.NewReverseProxyServer(*serverAddress, authPrivateKeyBytes, certPool)
 
-	go reverseProxyServer.KeepDialing()
+	reverseProxyServer.KeepDialing()
 }

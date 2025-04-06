@@ -3,7 +3,7 @@ package reverse_proxy
 import (
 	"crypto/x509"
 	"encoding/binary"
-	"errors"
+	"fmt"
 	"net"
 	"strconv"
 
@@ -16,7 +16,7 @@ type ReverseProxyServer struct {
 }
 
 func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool) *ReverseProxyServer {
-	ks := common.NewKeepDialingServer(false, serverAddress, authPrivateKeyBytes, certPool)
+	ks := common.NewKeepDialingServer(true, serverAddress, authPrivateKeyBytes, certPool)
 
 	ks.OnDial = func(conn *common.Conn) error {
 		if conn.Type != constant.ConnTypeUp {
@@ -27,7 +27,7 @@ func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, cer
 		// read the route information
 		route := <-conn.Ch
 		if len(route) != 16+2 {
-			return errors.New("invalid route")
+			return fmt.Errorf("invalid route: %v, len: %d", route, len(route))
 		}
 
 		// set the match id
