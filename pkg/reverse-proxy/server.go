@@ -39,10 +39,10 @@ func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, cer
 			dstHost = net.IP(route).String()
 		} else {
 			// ipv4
-			dstHost = net.IP(route[13:]).String()
+			dstHost = net.IP(route[12:16]).String()
 		}
 
-		dstPort := binary.BigEndian.Uint16(route[17:])
+		dstPort := binary.BigEndian.Uint16(route[16:])
 
 		downConn, err := net.Dial("tcp", dstHost+":"+strconv.Itoa(int(dstPort)))
 		if err != nil {

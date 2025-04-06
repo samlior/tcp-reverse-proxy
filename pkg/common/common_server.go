@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -50,7 +51,7 @@ func (cs *CommonServer) readDataFromConn(conn *Conn, readFinished chan struct{})
 
 	for {
 		length, err := conn.Conn.Read(buffer)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 			// closed
 			return
 		}
@@ -79,7 +80,7 @@ func (cs *CommonServer) writeDataToConn(conn *Conn, ch <-chan []byte, writeFinis
 		}
 
 		_, err := conn.Conn.Write(data)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 			// closed
 			return
 		}
@@ -182,7 +183,6 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 	for i, p := range *pendingConnections {
 		if p.conn == conn {
-			p.conn.Conn.Close()
 			p.anotherCh <- nil
 			*pendingConnections = append((*pendingConnections)[:i], (*pendingConnections)[i+1:]...)
 			break
@@ -196,6 +196,8 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 
 	// update status
 	conn.Status = constant.ConnStatusClosed
+
+	conn.Conn.Close()
 }
 
 func (cs *CommonServer) HandleConnection(
