@@ -125,16 +125,16 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 }
 
 func (s *EntryPointServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, constant.ConnTypeUp, func(conn *common.Conn) (isUpStream bool, err error) {
+	s.CommonServer.HandleConnection(conn, constant.ConnTypeUp, func(conn *common.Conn) error {
 		localAddr := conn.Conn.LocalAddr().String()
 		host, strPort, err := net.SplitHostPort(localAddr)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		uint64Port, err := strconv.ParseUint(strPort, 10, 16)
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		port := uint16(uint64Port)
@@ -147,7 +147,7 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 			}
 		}
 		if route == nil {
-			return false, fmt.Errorf("no route found for %s:%d", host, port)
+			return fmt.Errorf("no route found for %s:%d", host, port)
 		}
 
 		dstHostBytes := net.ParseIP(route.DstHost)
@@ -161,10 +161,9 @@ func (s *EntryPointServer) HandleConnection(conn net.Conn) {
 
 		_, err = conn.Conn.Write(append(dstHostBytes, dstPostBytes...))
 		if err != nil {
-			return false, err
+			return err
 		}
 
-		// inform the local server that we are the upstream
-		return true, nil
+		return nil
 	})
 }

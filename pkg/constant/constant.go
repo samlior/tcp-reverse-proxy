@@ -6,4 +6,10 @@ const (
 	ConnTypeUnknown = "unknown"
 )
 
+const (
+	ConnStatusPending = iota
+	ConnStatusConnected
+	ConnStatusClosed
+)
+
 const Concurrency = 5

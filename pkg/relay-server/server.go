@@ -24,45 +24,47 @@ func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 			Id:                     1,
 			PendingUpConnections:   make([]*common.PendingConnection, 0),
 			PendingDownConnections: make([]*common.PendingConnection, 0),
-			Connections:            make(map[uint64]map[uint64]*common.Connection),
 		},
 	}
 }
 
 func (s *RelayServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(conn *common.Conn) (isUpStream bool, err error) {
+	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(conn *common.Conn) error {
 		randomBytes := make([]byte, 32)
-		_, err = rand.Read(randomBytes)
+		_, err := rand.Read(randomBytes)
 		if err != nil {
-			return
+			return err
 		}
 
 		_, err = conn.Conn.Write(randomBytes)
 		if err != nil {
-			return
+			return err
 		}
 
 		// wait for challenge answer
 		select {
 		case <-time.After(time.Second):
-			err = errors.New("client challenge timed out")
-			return
+			return errors.New("client challenge timed out")
 		case initialMessage := <-conn.Ch:
 			if len(initialMessage) != 1+64 {
-				err = errors.New("client sent invalid initial message")
-				return
+				return errors.New("client sent invalid initial message")
 			}
 
-			isUpStream = initialMessage[0] == 1
 			signature := initialMessage[1:]
+
+			// set the connection type
+			if initialMessage[0] == 1 {
+				conn.Type = constant.ConnTypeUp
+			} else {
+				conn.Type = constant.ConnTypeDown
+			}
 
 			// verify challenge signature
 			if !ed25519.Verify(s.authPublicKeyBytes, randomBytes, signature) {
-				err = errors.New("client challenge verification failed")
-				return
+				return errors.New("client challenge verification failed")
 			}
 
-			return
+			return nil
 		}
 	})
 }

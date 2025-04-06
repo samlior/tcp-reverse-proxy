@@ -40,7 +40,6 @@ func NewKeepDialingServer(
 			Id:                     1,
 			PendingUpConnections:   make([]*PendingConnection, 0),
 			PendingDownConnections: make([]*PendingConnection, 0),
-			Connections:            make(map[uint64]map[uint64]*Connection),
 		},
 	}
 
@@ -55,12 +54,15 @@ func NewKeepDialingServer(
 		// whenever a connection drops,
 		// immediately establish a new one to maintain
 		// a consistent number of pending connections
-		if conn.Type == keepDialingConnType {
+		if conn.Type == keepDialingConnType && conn.Status == constant.ConnStatusPending {
 			s.releaseSemaphore(1)
 		}
 	}
 
 	s.OnConnected = func(conn *Conn, anotherConn *Conn) {
+		// whenever two connection connect to each other,
+		// immediately establish a new one to maintain
+		// a consistent number of pending connections
 		s.releaseSemaphore(1)
 	}
 
@@ -96,10 +98,10 @@ func (s *KeepDialingServer) dial() {
 		keepDialingConnType = constant.ConnTypeDown
 	}
 
-	s.CommonServer.HandleConnection(conn, keepDialingConnType, func(conn *Conn) (isUpStream bool, err error) {
+	s.CommonServer.HandleConnection(conn, keepDialingConnType, func(conn *Conn) error {
 		challenge := <-conn.Ch
 		if len(challenge) != 32 {
-			return false, errors.New("invalid challenge")
+			return errors.New("invalid challenge")
 		}
 
 		signature := ed25519.Sign(s.authPrivateKeyBytes, challenge)
@@ -115,17 +117,16 @@ func (s *KeepDialingServer) dial() {
 		// inform the relay server our type
 		_, err = conn.Conn.Write(append([]byte{flag}, signature...))
 		if err != nil {
-			return false, err
+			return err
 		}
 
 		// invoke the callback
 		err = s.onDial(conn)
 		if err != nil {
-			return false, err
+			return err
 		}
 
-		// inform the local server our type
-		return s.isUpstream, nil
+		return nil
 	})
 }
 

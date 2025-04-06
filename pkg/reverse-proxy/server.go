@@ -49,12 +49,11 @@ func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, cer
 			return err
 		}
 
-		go ks.HandleConnection(downConn, constant.ConnTypeDown, func(conn *common.Conn) (isUpStream bool, err error) {
+		go ks.HandleConnection(downConn, constant.ConnTypeDown, func(conn *common.Conn) error {
 			// set the match id
 			conn.MatchId = route
 
-			// inform the local server that we are the downstream
-			return false, nil
+			return nil
 		})
 
 		return nil
