@@ -59,7 +59,9 @@ func (cs *CommonServer) readDataFromConn(conn *Conn, readFinished chan struct{})
 		}
 
 		// send data to channel
-		conn.Ch <- buffer[:length]
+		data := make([]byte, length)
+		copy(data, buffer[:length])
+		conn.Ch <- data
 	}
 }
 

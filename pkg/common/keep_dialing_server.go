@@ -55,7 +55,7 @@ func NewKeepDialingServer(
 		// immediately establish a new one to maintain
 		// a consistent number of pending connections
 		if conn.Type == keepDialingConnType && conn.Status == constant.ConnStatusPending {
-			s.releaseSemaphore(1)
+			go s.releaseSemaphore(1)
 		}
 	}
 
@@ -63,7 +63,7 @@ func NewKeepDialingServer(
 		// whenever two connection connect to each other,
 		// immediately establish a new one to maintain
 		// a consistent number of pending connections
-		s.releaseSemaphore(1)
+		go s.releaseSemaphore(1)
 	}
 
 	return s
@@ -87,7 +87,7 @@ func (s *KeepDialingServer) dial() {
 	})
 	if err != nil {
 		log.Println("failed to dial to relay server:", err)
-		s.releaseSemaphore(100)
+		go s.releaseSemaphore(100)
 		return
 	}
 
