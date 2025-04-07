@@ -6,32 +6,36 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 
 	"github.com/samlior/tcp-reverse-proxy/pkg/common"
 	entry_point "github.com/samlior/tcp-reverse-proxy/pkg/entry-point"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
 	BuildTime string
 	GitCommit string
 
-	serverCert     *string
-	authPrivateKey *string
-	serverAddress  *string
-	strRoutes      *string
-
 	rootCmd = &cobra.Command{
 		Use:   "entry-point",
 		Short: "Entry point for tcp reverse proxy",
 		Long:  "Entry point for tcp reverse proxy",
 		Run: func(cmd *cobra.Command, args []string) {
-			serverCertBytes, err := os.ReadFile(*serverCert)
+			serverCert := viper.GetString("serverCert")
+			authPrivateKey := viper.GetString("authPrivateKey")
+			serverAddress := viper.GetString("serverAddress")
+			_routes := viper.GetStringSlice("routes")
+
+			if len(_routes) == 0 {
+				log.Fatal("routes is required")
+			}
+
+			serverCertBytes, err := os.ReadFile(serverCert)
 			if err != nil {
 				log.Fatal("failed to read server certificate:", err)
 			}
-			authPrivateKeyBytes, err := os.ReadFile(*authPrivateKey)
+			authPrivateKeyBytes, err := os.ReadFile(authPrivateKey)
 			if err != nil {
 				log.Fatal("failed to read auth private key:", err)
 			}
@@ -42,12 +46,12 @@ var (
 				log.Fatal("failed to append the server certificate")
 			}
 
-			routes, err := entry_point.ParseRoutes(strings.Split(*strRoutes, ","))
+			routes, err := entry_point.ParseRoutes(_routes)
 			if err != nil {
 				log.Fatal("failed to parse routes:", err)
 			}
 
-			entryPointServer := entry_point.NewEntryPointServer(*serverAddress, authPrivateKeyBytes, certPool, routes)
+			entryPointServer := entry_point.NewEntryPointServer(serverAddress, authPrivateKeyBytes, certPool, routes)
 
 			go common.HandleSignal(entryPointServer)
 
@@ -83,25 +87,45 @@ var (
 		Use:   "version",
 		Short: "Show version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("tcp-reverse-proxy/entry-point\n  build time: %s +0\n  git commit: %s\n", BuildTime, GitCommit)
+			log.Printf("tcp-reverse-proxy/entry-point\n  build time: %s +0\n  git commit: %s\n", BuildTime, GitCommit)
 		},
 	}
 )
 
 func init() {
-	serverCert = rootCmd.Flags().StringP("server-cert", "c", "cert/server.crt", "server certificate path")
-	authPrivateKey = rootCmd.Flags().StringP("auth-private-key", "p", "cert/auth", "auth private key path")
-	serverAddress = rootCmd.Flags().StringP("server-address", "s", "localhost:4433", "server address")
-	strRoutes = rootCmd.Flags().StringP("routes", "r", "", "route addresses, separated by commas")
+	rootCmd.PersistentFlags().String("config", "", "config file (optional, default is CLI only)")
 
-	rootCmd.MarkFlagRequired("routes")
+	rootCmd.Flags().StringP("server-cert", "c", "cert/server.crt", "server certificate path")
+	rootCmd.Flags().StringP("auth-private-key", "a", "cert/auth", "auth private key path")
+	rootCmd.Flags().StringP("server-address", "s", "localhost:4433", "server address")
+	rootCmd.Flags().StringSliceP("routes", "r", []string{}, "route addresses, separated by commas")
 
 	rootCmd.AddCommand(versionCmd)
+
+	viper.BindPFlag("serverCert", rootCmd.Flags().Lookup("server-cert"))
+	viper.BindPFlag("authPrivateKey", rootCmd.Flags().Lookup("auth-private-key"))
+	viper.BindPFlag("serverAddress", rootCmd.Flags().Lookup("server-address"))
+	viper.BindPFlag("routes", rootCmd.Flags().Lookup("routes"))
+
+	viper.AutomaticEnv()
+
+	cobra.OnInitialize(initConfig)
+}
+
+func initConfig() {
+	cfgFile, _ := rootCmd.Flags().GetString("config")
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		err := viper.ReadInConfig()
+		if err != nil {
+			log.Fatal("failed to read config file:", err)
+		}
+		log.Println("loaded config file:", viper.ConfigFileUsed())
+	}
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal("failed to execute root command:", err)
 	}
 }

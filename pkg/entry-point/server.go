@@ -3,7 +3,6 @@ package entry_point
 import (
 	"crypto/x509"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -43,7 +42,7 @@ func ParseRoutes(_routes []string) ([]Route, error) {
 		parts := strings.Split(route, ":")
 
 		if len(parts) <= 1 {
-			return nil, errors.New("invalid route")
+			return nil, fmt.Errorf("invalid route: %s", route)
 		} else if len(parts) == 2 {
 			// port:port
 			srcPort, err := strconv.ParseUint(parts[0], 10, 16)
