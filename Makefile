@@ -32,10 +32,7 @@ clean:
 	@rm -rf $(OUTPUT_DIR)
 	@echo "Cleaned."
 
-run:
-	go run ./cmd/main.go
-
 test:
 	go test ./...
 
-.PHONY: all build clean run test
+.PHONY: all build build-linux clean run test
