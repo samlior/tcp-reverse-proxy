@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 
@@ -26,6 +27,9 @@ func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, cer
 
 		// read the route information
 		route := <-conn.Ch
+		if route == nil {
+			return io.EOF
+		}
 		if len(route) != 16+2 {
 			return fmt.Errorf("invalid route: %v, len: %d", route, len(route))
 		}

@@ -42,10 +42,7 @@ type CommonServer struct {
 
 func (cs *CommonServer) readDataFromConn(conn *Conn, readFinished chan struct{}) {
 	defer close(conn.Ch)
-	defer func() {
-		readFinished <- struct{}{}
-		close(readFinished)
-	}()
+	defer close(readFinished)
 
 	buffer := make([]byte, 1024)
 
@@ -68,10 +65,7 @@ func (cs *CommonServer) readDataFromConn(conn *Conn, readFinished chan struct{})
 }
 
 func (cs *CommonServer) writeDataToConn(conn *Conn, ch <-chan []byte, writeFinished chan struct{}) {
-	defer func() {
-		writeFinished <- struct{}{}
-		close(writeFinished)
-	}()
+	defer close(writeFinished)
 
 	for data := range ch {
 		if data == nil {
@@ -227,6 +221,9 @@ func (cs *CommonServer) HandleConnection(
 
 	err := onInit(conn)
 	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+			return
+		}
 		log.Println("error onInit:", err)
 		return
 	}
