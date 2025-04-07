@@ -12,13 +12,24 @@ import (
 )
 
 type Conn struct {
-	Id      uint64
-	Conn    net.Conn
-	Ch      chan []byte
+	// unique id
+	Id uint64
+	// connection
+	Conn net.Conn
+	// data channel
+	Ch chan []byte
+	// connection type
+	Type string
+	// connection status
+	Status int
+
+	// match id
+	// used to match upstream and downstream in the reverse proxy server
 	MatchId []byte
-	Route   []byte
-	Type    string
-	Status  int
+	// route
+	// used to store the route information for the entry point server
+	// it will be immediately written to the downstream after the connection is established
+	Route []byte
 }
 
 type PendingConnection struct {
