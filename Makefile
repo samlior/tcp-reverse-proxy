@@ -1,4 +1,4 @@
-BUILD_TIME := $(shell date +%Y-%m-%dT%H:%M:%S)
+BUILD_TIME := $(shell TZ=UTC date +%Y-%m-%dT%H:%M:%S)
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 

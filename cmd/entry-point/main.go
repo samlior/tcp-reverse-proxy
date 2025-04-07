@@ -13,13 +13,28 @@ import (
 	entry_point "github.com/samlior/tcp-reverse-proxy/pkg/entry-point"
 )
 
+var (
+	BuildTime string
+	GitCommit string
+)
+
 func main() {
 	serverCert := flag.String("server-cert", "cert/server.crt", "server certificate path")
 	authPrivateKey := flag.String("auth-private-key", "cert/auth", "auth private key path")
 	serverAddress := flag.String("server-address", "localhost:4433", "server address")
 	strRoutes := flag.String("routes", "", "route addresses, separated by commas")
+	version := flag.Bool("version", false, "show version")
 
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("tcp-reverse-proxy/entry-point\n build time: %s +0\n git commit: %s\n", BuildTime, GitCommit)
+		return
+	}
+
+	if *strRoutes == "" {
+		log.Fatal("routes is required")
+	}
 
 	serverCertBytes, err := os.ReadFile(*serverCert)
 	if err != nil {

@@ -11,14 +11,25 @@ import (
 	relay_server "github.com/samlior/tcp-reverse-proxy/pkg/relay-server"
 )
 
+var (
+	BuildTime string
+	GitCommit string
+)
+
 func main() {
 	serverCert := flag.String("server-cert", "cert/server.crt", "server certificate path")
 	serverKey := flag.String("server-key", "cert/server.key", "server key path")
 	authPublicKey := flag.String("auth-public-key", "cert/auth.pub", "auth public key path")
+	version := flag.Bool("version", false, "show version")
 	host := flag.String("host", "0.0.0.0", "host")
 	port := flag.Int("port", 4433, "port")
 
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("tcp-reverse-proxy/entry-point\n build time: %s +0\n git commit: %s\n", BuildTime, GitCommit)
+		return
+	}
 
 	serverCertBytes, err := os.ReadFile(*serverCert)
 	if err != nil {
