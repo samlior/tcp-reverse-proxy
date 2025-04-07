@@ -36,11 +36,7 @@ func NewKeepDialingServer(
 		serverAddress:       serverAddress,
 		authPrivateKeyBytes: authPrivateKeyBytes,
 		certPool:            certPool,
-		CommonServer: &CommonServer{
-			Id:                     1,
-			PendingUpConnections:   make([]*PendingConnection, 0),
-			PendingDownConnections: make([]*PendingConnection, 0),
-		},
+		CommonServer:        NewCommonServer(),
 	}
 
 	var keepDialingConnType string
@@ -131,8 +127,12 @@ func (s *KeepDialingServer) dial() {
 }
 
 func (s *KeepDialingServer) KeepDialing() {
-	for !s.CommonServer.IsClosed() {
-		s.semaphore <- struct{}{}
-		go s.dial()
+	for {
+		select {
+		case <-s.Closed:
+			return
+		case s.semaphore <- struct{}{}:
+			go s.dial()
+		}
 	}
 }

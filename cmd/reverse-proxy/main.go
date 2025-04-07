@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/samlior/tcp-reverse-proxy/pkg/common"
 	reverse_proxy "github.com/samlior/tcp-reverse-proxy/pkg/reverse-proxy"
 )
 
@@ -31,6 +32,8 @@ func main() {
 	}
 
 	reverseProxyServer := reverse_proxy.NewReverseProxyServer(*serverAddress, authPrivateKeyBytes, certPool)
+
+	go common.HandleSignal(reverseProxyServer)
 
 	reverseProxyServer.KeepDialing()
 }

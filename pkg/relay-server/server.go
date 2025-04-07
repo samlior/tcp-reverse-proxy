@@ -20,11 +20,7 @@ type RelayServer struct {
 func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
 	return &RelayServer{
 		authPublicKeyBytes: authPublicKeyBytes,
-		CommonServer: &common.CommonServer{
-			Id:                     1,
-			PendingUpConnections:   make([]*common.PendingConnection, 0),
-			PendingDownConnections: make([]*common.PendingConnection, 0),
-		},
+		CommonServer:       common.NewCommonServer(),
 	}
 }
 
@@ -46,6 +42,10 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 		case <-time.After(time.Second):
 			return errors.New("client challenge timed out")
 		case initialMessage := <-conn.Ch:
+			if initialMessage == nil {
+				return errors.New("client connection closed")
+			}
+
 			if len(initialMessage) != 1+64 {
 				return errors.New("client sent invalid initial message")
 			}

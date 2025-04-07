@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/samlior/tcp-reverse-proxy/pkg/common"
 	entry_point "github.com/samlior/tcp-reverse-proxy/pkg/entry-point"
 )
 
@@ -44,9 +45,9 @@ func main() {
 
 	go entryPointServer.KeepDialing()
 
-	for _, route := range routes {
-		log.Println("route:", route)
+	go common.HandleSignal(entryPointServer)
 
+	for _, route := range routes {
 		srcHost := route.SrcHost
 		if srcHost == "*" {
 			srcHost = "0.0.0.0"
