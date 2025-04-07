@@ -3,6 +3,7 @@ package reverse_proxy
 import (
 	"crypto/x509"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -25,42 +26,45 @@ func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, cer
 			return nil
 		}
 
-		// read the route information
-		route := <-conn.Ch
-		if route == nil {
-			return io.EOF
-		}
-		if len(route) != 16+2 {
-			return fmt.Errorf("invalid route: %v, len: %d", route, len(route))
-		}
+		select {
+		case <-ks.Closed:
+			return errors.New("server closed")
+		case route := <-conn.Ch:
+			if route == nil {
+				return io.EOF
+			}
+			if len(route) != 16+2 {
+				return fmt.Errorf("invalid route: %v, len: %d", route, len(route))
+			}
 
-		// set the match id
-		conn.MatchId = route
-
-		var dstHost string
-		if route[0] != 0 {
-			// ipv6
-			dstHost = net.IP(route).String()
-		} else {
-			// ipv4
-			dstHost = net.IP(route[12:16]).String()
-		}
-
-		dstPort := binary.BigEndian.Uint16(route[16:])
-
-		downConn, err := net.Dial("tcp", dstHost+":"+strconv.Itoa(int(dstPort)))
-		if err != nil {
-			return err
-		}
-
-		go ks.HandleConnection(downConn, constant.ConnTypeDown, func(conn *common.Conn) error {
 			// set the match id
 			conn.MatchId = route
 
-			return nil
-		})
+			var dstHost string
+			if route[0] != 0 {
+				// ipv6
+				dstHost = net.IP(route).String()
+			} else {
+				// ipv4
+				dstHost = net.IP(route[12:16]).String()
+			}
 
-		return nil
+			dstPort := binary.BigEndian.Uint16(route[16:])
+
+			downConn, err := net.Dial("tcp", dstHost+":"+strconv.Itoa(int(dstPort)))
+			if err != nil {
+				return err
+			}
+
+			go ks.HandleConnection(downConn, constant.ConnTypeDown, func(conn *common.Conn) error {
+				// set the match id
+				conn.MatchId = route
+
+				return nil
+			})
+
+			return nil
+		}
 	}
 
 	return &ReverseProxyServer{

@@ -39,6 +39,8 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 
 		// wait for challenge answer
 		select {
+		case <-s.Closed:
+			return errors.New("server closed")
 		case <-time.After(time.Second):
 			return errors.New("client challenge timed out")
 		case initialMessage := <-conn.Ch:

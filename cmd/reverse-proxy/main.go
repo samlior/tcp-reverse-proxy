@@ -35,5 +35,7 @@ func main() {
 
 	go common.HandleSignal(reverseProxyServer)
 
-	reverseProxyServer.KeepDialing()
+	go reverseProxyServer.KeepDialing()
+
+	select {}
 }

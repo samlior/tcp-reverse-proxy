@@ -43,9 +43,9 @@ func main() {
 
 	entryPointServer := entry_point.NewEntryPointServer(*serverAddress, authPrivateKeyBytes, certPool, routes)
 
-	go entryPointServer.KeepDialing()
-
 	go common.HandleSignal(entryPointServer)
+
+	go entryPointServer.KeepDialing()
 
 	for _, route := range routes {
 		srcHost := route.SrcHost
