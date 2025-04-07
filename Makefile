@@ -2,11 +2,11 @@ BUILD_TIME := $(shell TZ=UTC date +%Y-%m-%dT%H:%M:%S)
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
-PLATFORMS := linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
-
 APPS := relay-server reverse-proxy entry-point
 
 OUTPUT_DIR := build
+
+PLATFORMS ?= linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
 
 all: clean build
 
@@ -24,6 +24,9 @@ build:
 			-o $$OUT ./cmd/$$app/main.go; \
 		done; \
 	done
+
+build-linux:
+	$(MAKE) build PLATFORMS=linux/amd64
 
 clean:
 	@rm -rf $(OUTPUT_DIR)
