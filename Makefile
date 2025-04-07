@@ -1,17 +1,38 @@
-.PHONY: build build-linux clean
+BUILD_TIME := $(shell date +%Y-%m-%dT%H:%M:%S)
 
-all: build
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+
+PLATFORMS := linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
+
+APPS := relay-server reverse-proxy entry-point
+
+OUTPUT_DIR := build
+
+all: clean build
 
 build:
-	go build -o bin/relay-server cmd/relay-server/main.go
-	go build -o bin/reverse-proxy cmd/reverse-proxy/main.go
-	go build -o bin/entry-point cmd/entry-point/main.go
-
-build-linux:
-	GOOS=linux GOARCH=amd64 go build -o bin/relay-server cmd/relay-server/main.go
-	GOOS=linux GOARCH=amd64 go build -o bin/reverse-proxy cmd/reverse-proxy/main.go
-	GOOS=linux GOARCH=amd64 go build -o bin/entry-point cmd/entry-point/main.go
+	@echo "Building ..."
+	@for platform in $(PLATFORMS); do \
+		OS=$${platform%%/*}; \
+		ARCH=$${platform##*/}; \
+		echo "→ $$OS/$$ARCH"; \
+		for app in $(APPS); do \
+			OUT=$(OUTPUT_DIR)/$$OS/$$ARCH/$$app; \
+			[ "$$OS" = "windows" ] && OUT=$$OUT.exe; \
+			GOOS=$$OS GOARCH=$$ARCH \
+			go build -ldflags "-X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)" \
+			-o $$OUT ./cmd/$$app/main.go; \
+		done; \
+	done
 
 clean:
-	rm -rf bin
+	@rm -rf $(OUTPUT_DIR)
+	@echo "Cleaned."
 
+run:
+	go run ./cmd/main.go
+
+test:
+	go test ./...
+
+.PHONY: all build clean run test
