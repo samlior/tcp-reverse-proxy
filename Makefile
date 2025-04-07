@@ -25,7 +25,7 @@ build:
 		done; \
 	done
 
-build-linux:
+build-linux-amd64:
 	$(MAKE) build PLATFORMS=linux/amd64
 
 clean:
@@ -35,4 +35,4 @@ clean:
 test:
 	go test ./...
 
-.PHONY: all build build-linux clean run test
+.PHONY: all build build-linux-amd64 clean run test
