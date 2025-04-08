@@ -79,3 +79,28 @@ flowchart LR
    | ip:port:ip:port | Listen on a specified local port, accept connections only from a specified IP, and forward them to a specified IP and port on the remote side. |
 
 5. Send a request to the `entry-point`
+
+## Run with Docker
+
+- Generate x509 cert and ed25519 key pair through docker
+
+  ```sh
+  docker run --rm -v ./cert:/app/cert samlior0o0/entry-point ./gen-cert x509 --dns localhost --ip 127.0.0.1,$YOUR_PUBLIC_IP
+  docker run --rm -v ./cert:/app/cert samlior0o0/entry-point ./gen-cert ed25519
+  ```
+
+- Start services
+
+  > NOTE: when running with Docker, it is recommended to pass parameters through a configuration file
+
+  ```sh
+  docker run -v ./cert:/app/cert -v ./config:/app/config -p 4433:4433 samlior0o0/relay-server
+  ```
+
+  ```sh
+  docker run -v ./cert:/app/cert -v ./config:/app/config --network host samlior0o0/entry-point
+  ```
+
+  ```sh
+  docker run -v ./cert:/app/cert -v ./config:/app/config --network host samlior0o0/entry-point
+  ```
