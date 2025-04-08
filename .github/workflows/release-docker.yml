@@ -40,17 +40,3 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }}:${{ github.ref_name }}
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }}:latest
-
-      - name: Install hub-tool
-        run: |
-          curl -L https://github.com/docker/hub-tool/releases/download/v0.4.6/hub-tool-linux-amd64.tar.gz -o hub-tool-linux-amd64.tar.gz
-          tar -xzvf hub-tool-linux-amd64.tar.gz
-          chmod +x ./hub-tool/hub-tool
-          sudo mv hub-tool/hub-tool /usr/local/bin/hub-tool
-
-      - name: Login to Docker Hub with hub-tool
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | hub-tool login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-      - name: Update README on Docker Hub
-        run: |
-          hub-tool readme update -r ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }} ./README.md
