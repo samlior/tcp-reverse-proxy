@@ -7,10 +7,9 @@ RUN make build-linux-amd64
 
 FROM alpine:latest AS runner
 WORKDIR /app
+VOLUME [ "/app/config", "/app/cert" ]
 ARG BUILD_APP
 COPY --from=builder /app/build/linux/amd64/gen-cert .
-COPY --from=builder /app/build/linux/amd64/${BUILD_APP} .
-ENV BUILD_APP=${BUILD_APP}
-VOLUME [ "/app/config", "/app/cert" ]
-CMD ./$BUILD_APP --config config/config.json
+COPY --from=builder /app/build/linux/amd64/${BUILD_APP} ./app
+CMD ["./app", "--config", "./config/config.json"]
 
