@@ -70,16 +70,20 @@ var (
 
 				log.Printf("listening on %s:%d...", srcHost, route.SrcPort)
 
-				for {
-					conn, err := listener.Accept()
-					if err != nil {
-						log.Println("failed to accept connection:", err)
-						continue
-					}
+				go func() {
+					for {
+						conn, err := listener.Accept()
+						if err != nil {
+							log.Println("failed to accept connection:", err)
+							continue
+						}
 
-					go entryPointServer.HandleConnection(conn)
-				}
+						go entryPointServer.HandleConnection(conn)
+					}
+				}()
 			}
+
+			select {}
 		},
 	}
 
