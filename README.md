@@ -78,7 +78,7 @@ flowchart LR
    | port:ip:port    | Listen on a specified local port, accept connections from any source, and forward them to a specified IP and port on the remote side           |
    | ip:port:ip:port | Listen on a specified local port, accept connections only from a specified IP, and forward them to a specified IP and port on the remote side. |
 
-5. Send a request to the `entry-point`
+5. Send your request to the `entry-point`
 
 ## Run with Docker
 
