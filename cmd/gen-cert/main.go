@@ -73,7 +73,7 @@ var (
 				log.Fatalf("failed to create certificate: %v", err)
 			}
 
-			// 5. Save certificate to cert.pem
+			// 5. Save certificate to server.crt
 			certOut, err := os.Create(filepath.Join(output, "server.crt"))
 			if err != nil {
 				log.Fatalf("failed to create server.crt: %v", err)
@@ -82,7 +82,7 @@ var (
 			certOut.Close()
 			fmt.Println("certificate saved to", filepath.Join(output, "server.crt"))
 
-			// 6. Save private key to key.pem
+			// 6. Save private key to server.key
 			keyOut, err := os.Create(filepath.Join(output, "server.key"))
 			if err != nil {
 				log.Fatalf("failed to create server.key: %v", err)
