@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  
+
 jobs:
   build-and-push:
     environment: docker-publish
@@ -38,4 +38,4 @@ jobs:
           build-args: |
             BUILD_APP=${{ matrix.app }}
           tags: |
-            ${{ env.DOCKER_USER }}/${{ matrix.app }}:${{ github.ref_name }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }}:${{ github.ref_name }}
