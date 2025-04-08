@@ -39,3 +39,4 @@ jobs:
             BUILD_APP=${{ matrix.app }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }}:${{ github.ref_name }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.app }}:latest
