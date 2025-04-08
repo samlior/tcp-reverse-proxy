@@ -43,7 +43,7 @@ jobs:
 
       - name: Install hub-tool
         run: |
-          curl -L curl -L https://github.com/docker/hub-tool/releases/download/v0.4.6/hub-tool-linux-amd64.tar.gz -o hub-tool-linux-amd64.tar.gz
+          curl -L https://github.com/docker/hub-tool/releases/download/v0.4.6/hub-tool-linux-amd64.tar.gz -o hub-tool-linux-amd64.tar.gz
           tar -xzvf hub-tool-linux-amd64.tar.gz
           chmod +x ./hub-tool/hub-tool
           sudo mv hub-tool/hub-tool /usr/local/bin/hub-tool
