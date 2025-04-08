@@ -2,7 +2,7 @@ BUILD_TIME := $(shell TZ=UTC date +%Y-%m-%dT%H:%M:%S)
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
-APPS := relay-server reverse-proxy entry-point
+APPS := relay-server reverse-proxy entry-point gen-cert
 
 OUTPUT_DIR := build
 
