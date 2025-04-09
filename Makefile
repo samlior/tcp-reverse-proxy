@@ -19,7 +19,7 @@ build:
 		for app in $(APPS); do \
 			OUT=$(OUTPUT_DIR)/$$OS/$$ARCH/$$app; \
 			[ "$$OS" = "windows" ] && OUT=$$OUT.exe; \
-			GOOS=$$OS GOARCH=$$ARCH \
+			GOOS=$$OS GOARCH=$$ARCH CGO_ENABLED=0\
 			go build -ldflags "-s -w -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)" \
 			-o $$OUT ./cmd/$$app/main.go; \
 		done; \
