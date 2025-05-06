@@ -17,8 +17,8 @@ type ReverseProxyServer struct {
 	*common.KeepDialingServer
 }
 
-func NewReverseProxyServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool) *ReverseProxyServer {
-	ks := common.NewKeepDialingServer(true, serverAddress, authPrivateKeyBytes, certPool)
+func NewReverseProxyServer(groupId uint8, serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool) *ReverseProxyServer {
+	ks := common.NewKeepDialingServer(groupId, true, serverAddress, authPrivateKeyBytes, certPool)
 
 	ks.OnDial = func(conn *common.Conn) error {
 		if conn.Type != constant.ConnTypeUp {

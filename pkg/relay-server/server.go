@@ -48,11 +48,18 @@ func (s *RelayServer) HandleConnection(conn net.Conn) {
 				return errors.New("client connection closed")
 			}
 
-			if len(initialMessage) != 1+64 {
+			var signature []byte
+			if len(initialMessage) == 1+1+64 { // flag + group id + signature
+				// set the group id
+				conn.GroupId = initialMessage[1]
+				signature = initialMessage[1+1:]
+			} else if len(initialMessage) == 1+64 { // flag + signature
+				// use default group id
+				conn.GroupId = 0
+				signature = initialMessage[1:]
+			} else {
 				return errors.New("client sent invalid initial message")
 			}
-
-			signature := initialMessage[1:]
 
 			// set the connection type
 			if initialMessage[0] == 1 {

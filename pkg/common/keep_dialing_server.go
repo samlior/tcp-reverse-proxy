@@ -17,6 +17,7 @@ type KeepDialingServer struct {
 
 	OnDial func(conn *Conn) error
 
+	groupId    uint8
 	isUpstream bool
 
 	semaphore           chan struct{}
@@ -26,11 +27,13 @@ type KeepDialingServer struct {
 }
 
 func NewKeepDialingServer(
+	groupId uint8,
 	isUpstream bool,
 	serverAddress string,
 	authPrivateKeyBytes []byte,
 	certPool *x509.CertPool) *KeepDialingServer {
 	s := &KeepDialingServer{
+		groupId:             groupId,
 		isUpstream:          isUpstream,
 		semaphore:           make(chan struct{}, constant.Concurrency),
 		serverAddress:       serverAddress,
@@ -109,9 +112,8 @@ func (s *KeepDialingServer) dial() {
 			flag = 0x02
 		}
 
-		// this is the entry point
-		// inform the relay server our type
-		_, err = conn.Conn.Write(append([]byte{flag}, signature...))
+		// inform the relay server our type and group id
+		_, err = conn.Conn.Write(append([]byte{flag, s.groupId}, signature...))
 		if err != nil {
 			return err
 		}

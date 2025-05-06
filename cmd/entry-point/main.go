@@ -25,6 +25,7 @@ var (
 			serverCert := viper.GetString("serverCert")
 			authPrivateKey := viper.GetString("authPrivateKey")
 			serverAddress := viper.GetString("serverAddress")
+			groupId := viper.GetUint8("groupId")
 			_routes := viper.GetStringSlice("routes")
 
 			if len(_routes) == 0 {
@@ -51,7 +52,7 @@ var (
 				log.Fatal("failed to parse routes:", err)
 			}
 
-			entryPointServer := entry_point.NewEntryPointServer(serverAddress, authPrivateKeyBytes, certPool, routes)
+			entryPointServer := entry_point.NewEntryPointServer(groupId, serverAddress, authPrivateKeyBytes, certPool, routes)
 
 			go common.HandleSignal(entryPointServer)
 
@@ -103,6 +104,7 @@ func init() {
 	rootCmd.Flags().StringP("auth-private-key", "a", "cert/auth", "auth private key path")
 	rootCmd.Flags().StringP("server-address", "s", "localhost:4433", "server address")
 	rootCmd.Flags().StringSliceP("routes", "r", []string{}, "route addresses, separated by commas")
+	rootCmd.Flags().Uint8P("group-id", "g", 0, "group id")
 
 	rootCmd.AddCommand(versionCmd)
 
@@ -110,6 +112,7 @@ func init() {
 	viper.BindPFlag("authPrivateKey", rootCmd.Flags().Lookup("auth-private-key"))
 	viper.BindPFlag("serverAddress", rootCmd.Flags().Lookup("server-address"))
 	viper.BindPFlag("routes", rootCmd.Flags().Lookup("routes"))
+	viper.BindPFlag("groupId", rootCmd.Flags().Lookup("group-id"))
 
 	viper.AutomaticEnv()
 

@@ -26,8 +26,8 @@ type EntryPointServer struct {
 	routes []Route
 }
 
-func NewEntryPointServer(serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, routes []Route) *EntryPointServer {
-	ks := common.NewKeepDialingServer(false, serverAddress, authPrivateKeyBytes, certPool)
+func NewEntryPointServer(groupId uint8, serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool, routes []Route) *EntryPointServer {
+	ks := common.NewKeepDialingServer(groupId, false, serverAddress, authPrivateKeyBytes, certPool)
 
 	return &EntryPointServer{
 		KeepDialingServer: ks,

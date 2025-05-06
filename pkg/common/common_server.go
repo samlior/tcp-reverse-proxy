@@ -23,6 +23,8 @@ type Conn struct {
 	// connection status
 	Status int
 
+	// group id
+	GroupId uint8
 	// match id
 	// used to match upstream and downstream in the reverse proxy server
 	MatchId []byte
@@ -128,7 +130,7 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, anotherCh chan *Conn) {
 		var another *PendingConnection
 		var anotherIndex int
 		for i, p := range *anotherPendingConnections {
-			if conn.MatchId == nil || bytes.Equal(p.conn.MatchId, conn.MatchId) {
+			if conn.GroupId == p.conn.GroupId && (conn.MatchId == nil || bytes.Equal(p.conn.MatchId, conn.MatchId)) {
 				another = p
 				anotherIndex = i
 				break
@@ -150,7 +152,7 @@ func (cs *CommonServer) registerPendingConn(conn *Conn, anotherCh chan *Conn) {
 			anotherCh <- another.conn
 			another.anotherCh <- conn
 
-			log.Println("connection connected:", conn.Id, conn.Conn.RemoteAddr(), "<->", another.conn.Id, another.conn.Conn.RemoteAddr())
+			log.Printf("connection connected(%d): %d %s <-> %d %s\n", conn.GroupId, conn.Id, conn.Conn.RemoteAddr(), another.conn.Id, another.conn.Conn.RemoteAddr())
 
 			return
 		}
@@ -182,14 +184,11 @@ func (cs *CommonServer) newConn(netConn net.Conn, connType string) (*Conn, error
 	default:
 	}
 
-	var id uint64
-	{
-		cs.lock.Lock()
-		defer cs.lock.Unlock()
+	cs.lock.Lock()
+	defer cs.lock.Unlock()
 
-		id = cs.Id
-		cs.Id++
-	}
+	id := cs.Id
+	cs.Id++
 
 	conn := &Conn{
 		Id:     id,
@@ -228,7 +227,7 @@ func (cs *CommonServer) removeConn(conn *Conn) {
 		}
 	}
 
-	log.Println("connection removed:", conn.Id, conn.Conn.RemoteAddr())
+	log.Printf("connection removed(%d): %d %s\n", conn.GroupId, conn.Id, conn.Conn.RemoteAddr())
 
 	// invoke callback
 	cs.onConnClosed(conn)
@@ -259,7 +258,7 @@ func (cs *CommonServer) HandleConnection(
 
 	defer cs.removeConn(conn)
 
-	log.Println("client connected:", conn.Id, conn.Conn.RemoteAddr())
+	log.Printf("connection connected(%d): %d %s\n", conn.GroupId, conn.Id, conn.Conn.RemoteAddr())
 
 	readFinished := make(chan struct{})
 	writeFinished := make(chan struct{})
@@ -274,6 +273,8 @@ func (cs *CommonServer) HandleConnection(
 		log.Println("error initializing connection:", err)
 		return
 	}
+
+	log.Printf("connection initialized(%d): %d %s\n", conn.GroupId, conn.Id, conn.Conn.RemoteAddr())
 
 	anotherCh := make(chan *Conn, 1)
 	cs.registerPendingConn(conn, anotherCh)
