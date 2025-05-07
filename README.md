@@ -58,15 +58,17 @@ flowchart LR
 3. Start the `reverse-proxy` on a server without public network access but that needs to be accessible from the outside
 
    ```sh
-   reverse-proxy -s $YOUR_PUBLIC_IP:4433
+   reverse-proxy -s $YOUR_PUBLIC_IP:4433 -g 7
    ```
 
    Tell the `reverse-proxy` the address of the `relay-server`. It will actively open pending connections to get ready for incoming user requests.
 
+   The `-g` option specifies the group ID, which defaults to `0`. A connection can only be established if the `reverse-proxy` and `entry-point` have matching group IDs.
+
 4. Start the `entry-point` (usually on your local machine)
 
    ```sh
-   entry-point -s $YOUR_PUBLIC_IP:4433 -r 5001:5001
+   entry-point -s $YOUR_PUBLIC_IP:4433 -r 5001:5001 -g 7
    ```
 
    Tell the `entry-point` the address of the `relay-server`. It will actively open pending connections for transmitting user requests. The `-r`(or `--routes`) parameter specifies the routing configuration. Multiple routing configurations are separated by commas. Supported formats are as follows:
