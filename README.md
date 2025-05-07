@@ -100,7 +100,7 @@ flowchart LR
   ```
 
   ```sh
-  docker run -v ./cert:/app/cert -v ./config:/app/config --network host samlior0o0/entry-point
+  docker run -v ./cert:/app/cert -v ./config:/app/config --network host samlior0o0/reverse-proxy
   ```
 
   ```sh
