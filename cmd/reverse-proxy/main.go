@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"crypto/x509"
 	"log"
 	"os"
@@ -23,7 +24,11 @@ var (
 			serverCert := viper.GetString("serverCert")
 			authPrivateKey := viper.GetString("authPrivateKey")
 			serverAddress := viper.GetString("serverAddress")
-			groupId := viper.GetUint8("groupId")
+			group := viper.GetInt("groupId")
+			if group < 0 || group > 255 {
+				log.Fatal("group id must be between 0 and 255")
+			}
+			groupId := uint8(group)
 
 			serverCertBytes, err := os.ReadFile(serverCert)
 			if err != nil {
@@ -32,6 +37,10 @@ var (
 			authPrivateKeyBytes, err := os.ReadFile(authPrivateKey)
 			if err != nil {
 				log.Fatal("failed to read auth private key:", err)
+			}
+
+			if len(authPrivateKeyBytes) != ed25519.PrivateKeySize {
+				log.Fatal("auth private key must be 64 bytes")
 			}
 
 			certPool := x509.NewCertPool()

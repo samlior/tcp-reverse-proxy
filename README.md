@@ -76,9 +76,9 @@ flowchart LR
    | Format          | Description                                                                                                                                    |
    | :-------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
    | port:port       | Listen on a specified local port, accept connections from anywhere, and forward them to a specified port on remote `127.0.0.1`                 |
-   | ip:port:port    | Listen on a specified local port, accept connections only from a specified IP, and forward them to a specified port on remote `127.0.0.1`      |
+   | ip:port:port    | Bind to a specified local IP and port, and forward connections to a specified port on remote `127.0.0.1`      |
    | port:ip:port    | Listen on a specified local port, accept connections from any source, and forward them to a specified IP and port on the remote side           |
-   | ip:port:ip:port | Listen on a specified local port, accept connections only from a specified IP, and forward them to a specified IP and port on the remote side. |
+   | ip:port:ip:port | Bind to a specified local IP and port, and forward connections to a specified IP and port on the remote side. |
 
 5. Send your request to the `entry-point`
 
@@ -106,3 +106,40 @@ flowchart LR
   ```sh
   docker run -v ./cert:/app/cert -v ./config:/app/config --network host samlior0o0/entry-point
   ```
+
+## Reliability and compatibility
+
+- Each reverse-proxy relay connection owns its destination connection. Requests
+  to the same destination are never paired through a shared destination queue.
+- TCP/TLS framing is independent of individual reads: the challenge is 32 bytes,
+  the authentication response is 65 bytes (legacy) or 66 bytes (with group ID),
+  and the destination header is 18 bytes. Application data following a header is
+  preserved. The relay accepts both authentication formats; upgraded clients
+  continue to send the existing 66-byte format.
+- TLS dialing, authentication and destination dialing have 10-second timeouts.
+  An incomplete destination header times out 10 seconds after its first byte.
+  Unmatched entry/relay connections expire after two minutes and client pools
+  reconnect automatically. Established streams have no inactivity timeout.
+- TCP half-close is forwarded so services can reply after receiving request EOF.
+  SIGINT and SIGTERM close active sockets and cancel pending dialing.
+- Route hosts must be IP literals. IPv6 addresses in routes use brackets, for
+  example `2222:[2001:db8::10]:22`. IPv6 destinations in `::/96`, including `::1`,
+  cannot be distinguished from legacy zero-padded IPv4 addresses in the existing
+  wire format and are rejected. Use `127.0.0.1` for local IPv4 services.
+- The route's source IP is the **local listener bind address**, not a client IP
+  allowlist. Use host firewall rules to restrict incoming clients.
+- Group IDs select a routing group, not separate trust domains: every holder of
+  the shared authentication private key can select any group and destination.
+  TLS encryption ends at the relay, which can inspect forwarded traffic.
+
+Run `go test -race ./...` and `go vet ./...` before publishing. The integration
+suite starts all three services with TLS and exercises concurrent requests,
+client disconnects and half-close responses. Unit tests cover fragmented and
+coalesced headers, legacy authentication, group separation and shutdown.
+
+For an existing installation, rebuild and redeploy `reverse-proxy` on the NAS to
+remove the destination-pairing defect. Deploy all three updated services to get
+framing, shutdown and half-close fixes throughout the chain. Existing sockets
+will disconnect when a container is replaced. Existing private key files should
+also be restricted to their owner (`chmod 600 cert/auth cert/server.key` where
+present); the generator now creates private keys with mode 0600.

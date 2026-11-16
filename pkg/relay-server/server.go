@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"io"
 	"net"
 	"time"
 
@@ -13,67 +14,55 @@ import (
 
 type RelayServer struct {
 	*common.CommonServer
-
 	authPublicKeyBytes []byte
 }
 
-func NewRelayServer(authPublicKeyBytes []byte) *RelayServer {
-	return &RelayServer{
-		authPublicKeyBytes: authPublicKeyBytes,
-		CommonServer:       common.NewCommonServer(),
-	}
+func NewRelayServer(key []byte) *RelayServer {
+	return &RelayServer{CommonServer: common.NewCommonServer(), authPublicKeyBytes: key}
 }
 
-func (s *RelayServer) HandleConnection(conn net.Conn) {
-	s.CommonServer.HandleConnection(conn, constant.ConnTypeUnknown, func(conn *common.Conn) error {
-		randomBytes := make([]byte, 32)
-		_, err := rand.Read(randomBytes)
-		if err != nil {
+func (s *RelayServer) HandleConnection(n net.Conn) {
+	s.CommonServer.HandleConnection(n, constant.ConnTypeUnknown, func(c *common.Conn) error {
+		if len(s.authPublicKeyBytes) != ed25519.PublicKeySize {
+			return errors.New("invalid auth public key size")
+		}
+		// The deadline includes the TLS handshake performed by the first write.
+		if err := c.Conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 			return err
 		}
-
-		_, err = conn.Conn.Write(randomBytes)
-		if err != nil {
+		challenge := make([]byte, 32)
+		if _, err := rand.Read(challenge); err != nil {
 			return err
 		}
-
-		// wait for challenge answer
-		select {
-		case <-s.Closed:
-			return errors.New("server closed")
-		case <-time.After(time.Second):
-			return errors.New("client challenge timed out")
-		case initialMessage := <-conn.Ch:
-			if initialMessage == nil {
-				return errors.New("client connection closed")
+		if err := common.WriteAll(c.Conn, challenge); err != nil {
+			return err
+		}
+		// Legacy clients send flag+signature (65 bytes); grouped clients send
+		// flag+group+signature (66). Verify the legacy form before reading the extra
+		// byte, rather than guessing the format from an arbitrary TCP read size.
+		msg := make([]byte, 66)
+		if _, err := io.ReadFull(c.Conn, msg[:65]); err != nil {
+			return err
+		}
+		switch msg[0] {
+		case 1:
+			c.Type = constant.ConnTypeUp
+		case 2:
+			c.Type = constant.ConnTypeDown
+		default:
+			return errors.New("invalid connection type")
+		}
+		if ed25519.Verify(s.authPublicKeyBytes, challenge, msg[1:65]) {
+			c.GroupId = 0
+		} else {
+			if _, err := io.ReadFull(c.Conn, msg[65:]); err != nil {
+				return err
 			}
-
-			var signature []byte
-			if len(initialMessage) == 1+1+64 { // flag + group id + signature
-				// set the group id
-				conn.GroupId = initialMessage[1]
-				signature = initialMessage[1+1:]
-			} else if len(initialMessage) == 1+64 { // flag + signature
-				// use default group id
-				conn.GroupId = 0
-				signature = initialMessage[1:]
-			} else {
-				return errors.New("client sent invalid initial message")
-			}
-
-			// set the connection type
-			if initialMessage[0] == 1 {
-				conn.Type = constant.ConnTypeUp
-			} else {
-				conn.Type = constant.ConnTypeDown
-			}
-
-			// verify challenge signature
-			if !ed25519.Verify(s.authPublicKeyBytes, randomBytes, signature) {
+			if !ed25519.Verify(s.authPublicKeyBytes, challenge, msg[2:]) {
 				return errors.New("client challenge verification failed")
 			}
-
-			return nil
+			c.GroupId = msg[1]
 		}
+		return c.Conn.SetDeadline(time.Time{})
 	})
 }

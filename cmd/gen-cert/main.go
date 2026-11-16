@@ -78,17 +78,28 @@ var (
 			if err != nil {
 				log.Fatalf("failed to create server.crt: %v", err)
 			}
-			pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-			certOut.Close()
+			if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+				log.Fatal(err)
+			}
+			if err := certOut.Close(); err != nil {
+				log.Fatal(err)
+			}
 			fmt.Println("certificate saved to", filepath.Join(output, "server.crt"))
 
 			// 6. Save private key to server.key
-			keyOut, err := os.Create(filepath.Join(output, "server.key"))
+			keyOut, err := os.OpenFile(filepath.Join(output, "server.key"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 			if err != nil {
 				log.Fatalf("failed to create server.key: %v", err)
 			}
-			pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-			keyOut.Close()
+			if err := keyOut.Chmod(0600); err != nil {
+				log.Fatal(err)
+			}
+			if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}); err != nil {
+				log.Fatal(err)
+			}
+			if err := keyOut.Close(); err != nil {
+				log.Fatal(err)
+			}
 			fmt.Println("private key saved to", filepath.Join(output, "server.key"))
 		},
 	}
@@ -110,25 +121,25 @@ var (
 			}
 
 			// 3. Save private key to auth
-			privateKeyFile, err := os.Create(filepath.Join(output, "auth"))
+			privateKeyFile, err := os.OpenFile(filepath.Join(output, "auth"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 			if err != nil {
 				log.Fatalf("failed to create auth: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(output, "auth"), privateKey, 0644); err != nil {
+			if err := privateKeyFile.Chmod(0600); err != nil {
+				log.Fatal(err)
+			}
+			if _, err := privateKeyFile.Write(privateKey); err != nil {
 				log.Fatalf("failed to write auth: %v", err)
 			}
-			privateKeyFile.Close()
+			if err := privateKeyFile.Close(); err != nil {
+				log.Fatal(err)
+			}
 			fmt.Println("private key saved to", filepath.Join(output, "auth"))
 
 			// 4. Save public key to auth.pub
-			publicKeyFile, err := os.Create(filepath.Join(output, "auth.pub"))
-			if err != nil {
-				log.Fatalf("failed to create auth.pub: %v", err)
-			}
 			if err := os.WriteFile(filepath.Join(output, "auth.pub"), publicKey, 0644); err != nil {
 				log.Fatalf("failed to write auth.pub: %v", err)
 			}
-			publicKeyFile.Close()
 			fmt.Println("public key saved to", filepath.Join(output, "auth.pub"))
 		},
 	}

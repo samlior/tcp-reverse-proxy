@@ -6,3 +6,5 @@ cert
 config.json
 config.yaml
 config.toml
+
+.DS_Store

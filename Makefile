@@ -12,7 +12,7 @@ all: clean build
 
 build:
 	@echo "Building ..."
-	@for platform in $(PLATFORMS); do \
+	@set -e; for platform in $(PLATFORMS); do \
 		OS=$${platform%%/*}; \
 		ARCH=$${platform##*/}; \
 		echo "→ $$OS/$$ARCH"; \

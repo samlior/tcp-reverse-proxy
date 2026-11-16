@@ -1,73 +1,49 @@
 package reverse_proxy
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/samlior/tcp-reverse-proxy/pkg/common"
-	"github.com/samlior/tcp-reverse-proxy/pkg/constant"
 )
 
-type ReverseProxyServer struct {
-	*common.KeepDialingServer
-}
+type ReverseProxyServer struct{ *common.KeepDialingServer }
 
-func NewReverseProxyServer(groupId uint8, serverAddress string, authPrivateKeyBytes []byte, certPool *x509.CertPool) *ReverseProxyServer {
-	ks := common.NewKeepDialingServer(groupId, true, serverAddress, authPrivateKeyBytes, certPool)
-
-	ks.OnDial = func(conn *common.Conn) error {
-		if conn.Type != constant.ConnTypeUp {
-			// ignore non-upstream connections
-			return nil
+func NewReverseProxyServer(groupId uint8, address string, key []byte, pool *x509.CertPool) *ReverseProxyServer {
+	ks := common.NewKeepDialingServer(groupId, true, address, key, pool)
+	ks.OnDial = func(c *common.Conn) error {
+		// TCP/TLS reads are not message boundaries. Read only the header so that
+		// coalesced application bytes remain available for the bridge.
+		route := make([]byte, 18)
+		if _, err := io.ReadFull(c.Conn, route[:1]); err != nil {
+			return err
 		}
-
-		select {
-		case <-ks.Closed:
-			return errors.New("server closed")
-		case route := <-conn.Ch:
-			if route == nil {
-				return io.EOF
-			}
-			if len(route) != 16+2 {
-				return fmt.Errorf("invalid route: %v, len: %d", route, len(route))
-			}
-
-			// set the match id
-			conn.MatchId = route
-
-			var dstHost string
-			if route[0] != 0 {
-				// ipv6
-				dstHost = net.IP(route).String()
-			} else {
-				// ipv4
-				dstHost = net.IP(route[12:16]).String()
-			}
-
-			dstPort := binary.BigEndian.Uint16(route[16:])
-
-			downConn, err := net.Dial("tcp", dstHost+":"+strconv.Itoa(int(dstPort)))
-			if err != nil {
-				return err
-			}
-
-			go ks.HandleConnection(downConn, constant.ConnTypeDown, func(conn *common.Conn) error {
-				// set the match id
-				conn.MatchId = route
-
-				return nil
-			})
-
-			return nil
+		if err := c.Conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			return err
 		}
+		if _, err := io.ReadFull(c.Conn, route[1:]); err != nil {
+			return err
+		}
+		if err := c.Conn.SetReadDeadline(time.Time{}); err != nil {
+			return err
+		}
+		ip := net.IP(route[:16])
+		if bytes.Equal(route[:12], make([]byte, 12)) {
+			ip = net.IP(route[12:16])
+		}
+		port := binary.BigEndian.Uint16(route[16:])
+		dst := net.JoinHostPort(ip.String(), strconv.Itoa(int(port)))
+		target, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ks.Context(), "tcp", dst)
+		if err != nil {
+			return err
+		}
+		c.Target = target
+		return nil
 	}
-
-	return &ReverseProxyServer{
-		KeepDialingServer: ks,
-	}
+	return &ReverseProxyServer{ks}
 }

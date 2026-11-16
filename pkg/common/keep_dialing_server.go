@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
 	"log"
 	"math/rand"
+	"net"
 	"time"
 
 	constant "github.com/samlior/tcp-reverse-proxy/pkg/constant"
@@ -69,8 +71,17 @@ func NewKeepDialingServer(
 }
 
 func (s *KeepDialingServer) releaseSemaphore(multiple int) {
-	time.Sleep(time.Millisecond * time.Duration((rand.Intn(50)+50)*multiple))
-	<-s.semaphore
+	timer := time.NewTimer(time.Millisecond * time.Duration((rand.Intn(50)+50)*multiple))
+	defer timer.Stop()
+	select {
+	case <-s.Closed:
+		return
+	case <-timer.C:
+	}
+	select {
+	case <-s.semaphore:
+	case <-s.Closed:
+	}
 }
 
 func (s *KeepDialingServer) onDial(conn *Conn) error {
@@ -81,9 +92,8 @@ func (s *KeepDialingServer) onDial(conn *Conn) error {
 }
 
 func (s *KeepDialingServer) dial() {
-	conn, err := tls.Dial("tcp", s.serverAddress, &tls.Config{
-		RootCAs: s.certPool,
-	})
+	dialer := tls.Dialer{NetDialer: &net.Dialer{Timeout: 10 * time.Second}, Config: &tls.Config{RootCAs: s.certPool}}
+	netConn, err := dialer.DialContext(s.Context(), "tcp", s.serverAddress)
 	if err != nil {
 		log.Println("failed to dial to relay server:", err)
 		go s.releaseSemaphore(100)
@@ -97,10 +107,16 @@ func (s *KeepDialingServer) dial() {
 		keepDialingConnType = constant.ConnTypeDown
 	}
 
-	s.CommonServer.HandleConnection(conn, keepDialingConnType, func(conn *Conn) error {
-		challenge := <-conn.Ch
-		if len(challenge) != 32 {
-			return errors.New("invalid challenge")
+	s.CommonServer.HandleConnection(netConn, keepDialingConnType, func(conn *Conn) error {
+		if len(s.authPrivateKeyBytes) != ed25519.PrivateKeySize {
+			return errors.New("invalid auth private key size")
+		}
+		if err := conn.Conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			return err
+		}
+		challenge := make([]byte, 32)
+		if _, err := io.ReadFull(conn.Conn, challenge); err != nil {
+			return err
 		}
 
 		signature := ed25519.Sign(s.authPrivateKeyBytes, challenge)
@@ -113,8 +129,12 @@ func (s *KeepDialingServer) dial() {
 		}
 
 		// inform the relay server our type and group id
-		_, err = conn.Conn.Write(append([]byte{flag, s.groupId}, signature...))
+		err = WriteAll(conn.Conn, append([]byte{flag, s.groupId}, signature...))
 		if err != nil {
+			return err
+		}
+
+		if err := conn.Conn.SetDeadline(time.Time{}); err != nil {
 			return err
 		}
 

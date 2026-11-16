@@ -1,6 +1,7 @@
 package entry_point
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
@@ -35,91 +36,90 @@ func NewEntryPointServer(groupId uint8, serverAddress string, authPrivateKeyByte
 	}
 }
 
-func ParseRoutes(_routes []string) ([]Route, error) {
-	routes := make([]Route, len(_routes))
-
-	for i, route := range _routes {
-		parts := strings.Split(route, ":")
-
-		if len(parts) <= 1 {
-			return nil, fmt.Errorf("invalid route: %s", route)
-		} else if len(parts) == 2 {
-			// port:port
-			srcPort, err := strconv.ParseUint(parts[0], 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("invalid source port: %s", parts[0])
+// splitRoute permits bracketed IPv6 addresses while preserving the legacy syntax.
+func splitRoute(route string) ([]string, error) {
+	var parts []string
+	start, bracket := 0, false
+	for i, r := range route {
+		switch r {
+		case '[':
+			if bracket || i != start {
+				return nil, fmt.Errorf("invalid route: %s", route)
 			}
-
-			dstPort, err := strconv.ParseUint(parts[1], 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("invalid destination port: %s", parts[1])
+			bracket = true
+		case ']':
+			if !bracket {
+				return nil, fmt.Errorf("invalid route: %s", route)
 			}
-
-			routes[i] = Route{
-				SrcHost: "*",
-				SrcPort: uint16(srcPort),
-				DstHost: "127.0.0.1",
-				DstPort: uint16(dstPort),
+			bracket = false
+			if i+1 < len(route) && route[i+1] != ':' {
+				return nil, fmt.Errorf("invalid route: %s", route)
 			}
-		} else if len(parts) == 3 {
-			var srcHost string
-			var srcPort uint64
-			var dstHost string
-			var dstPort uint64
-			var err error
-
-			srcPort, err = strconv.ParseUint(parts[0], 10, 16)
-			if err != nil {
-				// ip:port:port
-				srcHost = parts[0]
-				srcPort, err = strconv.ParseUint(parts[1], 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("invalid source port: %s", parts[0])
-				}
-				dstHost = "127.0.0.1"
-				dstPort, err = strconv.ParseUint(parts[2], 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("invalid destination port: %s", parts[1])
-				}
-			} else {
-				// port:ip:port
-				srcHost = "*"
-				dstHost = parts[1]
-				dstPort, err = strconv.ParseUint(parts[2], 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("invalid destination port: %s", parts[2])
-				}
+		case ':':
+			if !bracket {
+				parts = append(parts, strings.Trim(route[start:i], "[]"))
+				start = i + 1
 			}
-
-			routes[i] = Route{
-				SrcHost: srcHost,
-				SrcPort: uint16(srcPort),
-				DstHost: dstHost,
-				DstPort: uint16(dstPort),
-			}
-		} else if len(parts) == 4 {
-			// ip:port:ip:port
-			srcPort, err := strconv.ParseUint(parts[1], 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("invalid source port: %s", parts[1])
-			}
-
-			dstPort, err := strconv.ParseUint(parts[3], 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("invalid destination port: %s", parts[3])
-			}
-
-			routes[i] = Route{
-				SrcHost: parts[0],
-				SrcPort: uint16(srcPort),
-				DstHost: parts[2],
-				DstPort: uint16(dstPort),
-			}
-		} else {
-			return nil, fmt.Errorf("invalid route: %s", route)
 		}
 	}
+	if bracket {
+		return nil, fmt.Errorf("invalid route: %s", route)
+	}
+	return append(parts, strings.Trim(route[start:], "[]")), nil
+}
 
+func ParseRoutes(input []string) ([]Route, error) {
+	routes := make([]Route, 0, len(input))
+	seen := make(map[string]bool)
+	for _, raw := range input {
+		parts, err := splitRoute(raw)
+		if err != nil {
+			return nil, err
+		}
+		r := Route{SrcHost: "*", DstHost: "127.0.0.1"}
+		var src, dst string
+		switch len(parts) {
+		case 2:
+			src, dst = parts[0], parts[1]
+		case 3:
+			if _, err := strconv.ParseUint(parts[0], 10, 16); err == nil {
+				src, r.DstHost, dst = parts[0], parts[1], parts[2]
+			} else {
+				r.SrcHost, src, dst = parts[0], parts[1], parts[2]
+			}
+		case 4:
+			r.SrcHost, src, r.DstHost, dst = parts[0], parts[1], parts[2], parts[3]
+		default:
+			return nil, fmt.Errorf("invalid route: %s", raw)
+		}
+		sp, err := strconv.ParseUint(src, 10, 16)
+		if err != nil || sp == 0 {
+			return nil, fmt.Errorf("invalid source port in route: %s", raw)
+		}
+		dp, err := strconv.ParseUint(dst, 10, 16)
+		if err != nil || dp == 0 {
+			return nil, fmt.Errorf("invalid destination port in route: %s", raw)
+		}
+		if r.SrcHost != "*" && net.ParseIP(r.SrcHost) == nil {
+			return nil, fmt.Errorf("invalid bind IP in route: %s", raw)
+		}
+		ip := net.ParseIP(r.DstHost)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid destination IP in route: %s", raw)
+		}
+		// The existing wire format reserves twelve zero bytes for legacy IPv4.
+		// Reject ambiguous IPv6 destinations instead of silently routing to IPv4.
+		if ip.To4() == nil && bytes.Equal(ip.To16()[:12], make([]byte, 12)) {
+			return nil, fmt.Errorf("IPv6 destination in ::/96 is ambiguous in the legacy wire format: %s", raw)
+		}
+		r.SrcPort, r.DstPort = uint16(sp), uint16(dp)
+		key := net.JoinHostPort(r.SrcHost, strconv.FormatUint(sp, 10))
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate listener in route: %s", raw)
+		}
+		seen[key] = true
+		routes = append(routes, r)
+	}
 	return routes, nil
 }
 

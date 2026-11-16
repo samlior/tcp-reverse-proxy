@@ -1,11 +1,12 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"crypto/x509"
-	"fmt"
 	"log"
 	"net"
 	"os"
+	"strconv"
 
 	"github.com/samlior/tcp-reverse-proxy/pkg/common"
 	entry_point "github.com/samlior/tcp-reverse-proxy/pkg/entry-point"
@@ -25,7 +26,11 @@ var (
 			serverCert := viper.GetString("serverCert")
 			authPrivateKey := viper.GetString("authPrivateKey")
 			serverAddress := viper.GetString("serverAddress")
-			groupId := viper.GetUint8("groupId")
+			group := viper.GetInt("groupId")
+			if group < 0 || group > 255 {
+				log.Fatal("group id must be between 0 and 255")
+			}
+			groupId := uint8(group)
 			_routes := viper.GetStringSlice("routes")
 
 			if len(_routes) == 0 {
@@ -39,6 +44,10 @@ var (
 			authPrivateKeyBytes, err := os.ReadFile(authPrivateKey)
 			if err != nil {
 				log.Fatal("failed to read auth private key:", err)
+			}
+
+			if len(authPrivateKeyBytes) != ed25519.PrivateKeySize {
+				log.Fatal("auth private key must be 64 bytes")
 			}
 
 			certPool := x509.NewCertPool()
@@ -64,7 +73,7 @@ var (
 					srcHost = "0.0.0.0"
 				}
 
-				listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", srcHost, route.SrcPort))
+				listener, err := net.Listen("tcp", net.JoinHostPort(srcHost, strconv.Itoa(int(route.SrcPort))))
 				if err != nil {
 					log.Fatal("failed to listen:", err)
 				}

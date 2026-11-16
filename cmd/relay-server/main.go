@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -38,6 +39,10 @@ var (
 			authPublicKeyBytes, err := os.ReadFile(authPublicKey)
 			if err != nil {
 				log.Fatal("failed to read auth public key:", err)
+			}
+
+			if len(authPublicKeyBytes) != ed25519.PublicKeySize {
+				log.Fatal("auth public key must be 32 bytes")
 			}
 
 			cert, err := tls.X509KeyPair(serverCertBytes, serverKeyBytes)
